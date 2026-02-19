@@ -1,7 +1,7 @@
 [project]
 name = "comp-551-a2"
 version = "0.1.0"
-description = "Add your description here"
+description = "Logistic regression with mini-batch SGD, K-fold CV, and L1/L2 regularization on the UCI Spambase dataset"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -9,6 +9,5 @@ dependencies = [
     "numpy>=2.4.2",
     "pandas>=3.0.1",
     "scikit-learn>=1.8.0",
-    "scipy>=1.17.0",
     "seaborn>=0.13.2",
 ]

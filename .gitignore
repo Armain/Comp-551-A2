@@ -12,6 +12,7 @@ wheels/
 # Misc
 assignment_description.md
 *.pdf
+*.png
 
 # AI
 CLAUDE.md
