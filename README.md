@@ -10,7 +10,8 @@ Logistic regression with mini-batch SGD on the UCI Spambase dataset. Covers from
 │   ├── preprocessing.py   # Data loading, train/test split, standardization, K-fold
 │   ├── models.py          # LogisticRegressionSGD (from-scratch implementation)
 │   ├── evaluation.py      # Cross-entropy, accuracy, K-fold CV runner
-│   └── plot.py            # All figure generation functions
+│   ├── plot.py            # All figure generation functions
+│   └── utils.py           # Config loading and validation (pydantic)
 ├── data/
 │   ├── spambase.data      # UCI Spambase dataset (4601 samples, 57 features)
 │   ├── spambase.names     # Feature descriptions
@@ -20,6 +21,7 @@ Logistic regression with mini-batch SGD on the UCI Spambase dataset. Covers from
 │   ├── task2/
 │   ├── task3/
 │   └── task4/
+├── config.ini             # Runtime settings (random seed, plot display)
 ├── requirements.txt
 ├── pyproject.toml
 └── README.md
@@ -78,7 +80,7 @@ python src/main.py
 All 4 tasks run sequentially with progress printed to stdout:
 
 1. **Task 1**: Trains 30 model configurations (3 batch sizes x 5 learning rates x 2 regularization settings) for 200 epochs. Saves 1 combined training curve plot.
-2. **Task 2**: Runs 5-fold CV over 27 hyperparameter configurations. Prints best config and saves a heatmap.
+2. **Task 2**: Runs 5-fold CV over 125 hyperparameter configurations (5x5x5 grid). Prints best config and saves a heatmap.
 3. **Task 3**: Runs K-fold CV over 8 lambda values. Prints best lambda and final test CE/accuracy. Saves 2 plots.
 4. **Task 4**: Fits L1 regularization path over 30 C values using sklearn. Saves 3 plots.
 
@@ -97,6 +99,21 @@ All figures are saved to `figures/` (created automatically):
 | `task4/coef_path.png` | Top-10 L1 coefficient values vs C |
 | `task4/sparsity.png` | Number of non-zero coefficients vs C |
 | `task4/cv_performance.png` | Mean CV accuracy vs C |
+
+## Configuration
+
+Runtime settings are stored in `config.ini` at the project root and validated via pydantic in `src/utils.py`:
+
+```ini
+[settings]
+random_seed = 2026
+show_inline_plots = true
+```
+
+| Setting | Type | Description |
+|---------|------|-------------|
+| `random_seed` | int | Seed for all random number generators (reproducibility) |
+| `show_inline_plots` | bool | Whether to display plots interactively (set to `false` for headless runs) |
 
 ## Implementation Notes
 
