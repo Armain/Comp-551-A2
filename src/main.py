@@ -160,76 +160,76 @@ def sweep_regularization(X_train, y_train, X_test, y_test):
 # Proposed changes to this method 
 def fit_l1_regularization_path(X_train, y_train, X_test, y_test):
 # Task 4: L1 regularization path using sklearn (no test leakage).
-print("\nTask 4: L1 Regularization Path")
+    print("\nTask 4: L1 Regularization Path")
 
-# Standardize once using TRAIN stats, then apply to TEST
-X_tr_std, X_te_std, _, _ = standardize(X_train, X_test)
-y_tr_arr = y_train.values if hasattr(y_train, "values") else y_train
-y_te_arr = y_test.values if hasattr(y_test, "values") else y_test
+    # Standardize once using TRAIN stats, then apply to TEST
+    X_tr_std, X_te_std, _, _ = standardize(X_train, X_test)
+    y_tr_arr = y_train.values if hasattr(y_train, "values") else y_train
+    y_te_arr = y_test.values if hasattr(y_test, "values") else y_test
 
-Cs = np.logspace(-4, 4, 30)
-coef_matrix = np.zeros((len(Cs), X_tr_std.shape[1]))
-nnz_counts = np.zeros(len(Cs), dtype=int)
+    Cs = np.logspace(-4, 4, 30)
+    coef_matrix = np.zeros((len(Cs), X_tr_std.shape[1]))
+    nnz_counts = np.zeros(len(Cs), dtype=int)
 
-# Proposed change 1: Use true L1 logistic regression: penalty="l1"
-# Proposed change 2: Do not evaluate on the test set during the path (cuz it prevents test leakage)
-for i, C in enumerate(Cs):
-    model = LogisticRegression(
+    # Proposed change 1: Use true L1 logistic regression: penalty="l1"
+    # Proposed change 2: Do not evaluate on the test set during the path (cuz it prevents test leakage)
+    for i, C in enumerate(Cs):
+        model = LogisticRegression(
+            penalty="l1",
+            C=C,
+            solver="saga",
+            max_iter=10000,
+            tol=1e-4,
+            warm_start=True,
+            random_state=RANDOM_SEED
+        )
+        model.fit(X_tr_std, y_tr_arr)
+
+        coef_matrix[i] = model.coef_[0]
+        nnz_counts[i] = int(np.sum(np.abs(coef_matrix[i]) > 0))
+
+        #  only report training structure statistics during the path
+        print(f"  C={C:.4e}: nnz={nnz_counts[i]}")
+
+    # Plots for the regularization path and sparsity
+    plot_l1_coef_path(Cs, coef_matrix, FEATURE_NAMES)
+    plot_l1_sparsity(Cs, nnz_counts)
+
+    # Proposed change 3: Use CV (on TRAIN ONLY) to select best C
+    print("  Running LogisticRegressionCV for CV performance plot...")
+    cv_model = LogisticRegressionCV(
         penalty="l1",
-        C=C,
+        solver="saga",
+        Cs=Cs,
+        cv=5,
+        max_iter=10000,
+        random_state=RANDOM_SEED,
+        scoring="accuracy"
+    )
+    cv_model.fit(X_tr_std, y_tr_arr)
+
+    # For binary classification, scores_ is keyed by class label (0/1)
+    # Use class 1 if present; otherwise fall back to the last key.
+    key = 1 if 1 in cv_model.scores_ else list(cv_model.scores_.keys())[-1]
+    mean_scores = cv_model.scores_[key].mean(axis=0)
+
+    plot_l1_cv_performance(Cs, mean_scores)
+
+    best_C = float(cv_model.C_[0])
+    print(f"  Best C (CV): {best_C:.4e} (lambda={1/best_C:.4e})")
+
+    # Proposed change 4: Evaluate on TEST only once, at the CV-selected C
+    final_model = LogisticRegression(
+        penalty="l1",
+        C=best_C,
         solver="saga",
         max_iter=10000,
         tol=1e-4,
-        warm_start=True,
         random_state=RANDOM_SEED
     )
-    model.fit(X_tr_std, y_tr_arr)
-
-    coef_matrix[i] = model.coef_[0]
-    nnz_counts[i] = int(np.sum(np.abs(coef_matrix[i]) > 0))
-
-    #  only report training structure statistics during the path
-    print(f"  C={C:.4e}: nnz={nnz_counts[i]}")
-
-# Plots for the regularization path and sparsity
-plot_l1_coef_path(Cs, coef_matrix, FEATURE_NAMES)
-plot_l1_sparsity(Cs, nnz_counts)
-
-# Proposed change 3: Use CV (on TRAIN ONLY) to select best C
-print("  Running LogisticRegressionCV for CV performance plot...")
-cv_model = LogisticRegressionCV(
-    penalty="l1",
-    solver="saga",
-    Cs=Cs,
-    cv=5,
-    max_iter=10000,
-    random_state=RANDOM_SEED,
-    scoring="accuracy"
-)
-cv_model.fit(X_tr_std, y_tr_arr)
-
-# For binary classification, scores_ is keyed by class label (0/1)
-# Use class 1 if present; otherwise fall back to the last key.
-key = 1 if 1 in cv_model.scores_ else list(cv_model.scores_.keys())[-1]
-mean_scores = cv_model.scores_[key].mean(axis=0)
-
-plot_l1_cv_performance(Cs, mean_scores)
-
-best_C = float(cv_model.C_[0])
-print(f"  Best C (CV): {best_C:.4e} (lambda={1/best_C:.4e})")
-
-# Proposed change 4: Evaluate on TEST only once, at the CV-selected C
-final_model = LogisticRegression(
-    penalty="l1",
-    C=best_C,
-    solver="saga",
-    max_iter=10000,
-    tol=1e-4,
-    random_state=RANDOM_SEED
-)
-final_model.fit(X_tr_std, y_tr_arr)
-test_acc = final_model.score(X_te_std, y_te_arr)
-print(f"  One-time L1 test accuracy at CV-selected C: {test_acc:.4f}")
+    final_model.fit(X_tr_std, y_tr_arr)
+    test_acc = final_model.score(X_te_std, y_te_arr)
+    print(f"  One-time L1 test accuracy at CV-selected C: {test_acc:.4f}")
 
 
 if __name__ == "__main__":
