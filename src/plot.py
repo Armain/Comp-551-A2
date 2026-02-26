@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 — registers 3D projection
 from pathlib import Path
 from utils import config
 
@@ -25,7 +26,6 @@ def plot_training_curves(training_curves, save_path=FIG / "task1" / "training_cu
     """
     batch_sizes = sorted(training_curves["batch_size"].unique())
     lam_vals = sorted(training_curves["lam"].unique())
-    row_labels = {0: "No regularization", 1e-3: r"$\lambda=10^{-3}$"}
 
     fig, axes = plt.subplots(len(lam_vals), len(batch_sizes), figsize=(5 * len(batch_sizes), 7), sharey=True)
 
@@ -38,7 +38,7 @@ def plot_training_curves(training_curves, save_path=FIG / "task1" / "training_cu
             ax.set_yscale("log")
             ax.grid(True, alpha=0.3)
             ax.set_xlabel("Epoch")
-            ax.set_title(f"Batch Size={bs}  [{row_labels[lam]}]")
+            ax.set_title(rf"Batch Size={bs}  [$\lambda={lam}$]")
             if col == 0:
                 ax.set_ylabel("Training Cross-Entropy")
 
@@ -49,29 +49,40 @@ def plot_training_curves(training_curves, save_path=FIG / "task1" / "training_cu
     save_fig(fig, save_path)
 
 
-def plot_cv_heatmap(cv_results, save_path=FIG / "task2" / "cv_results_table.png"):
-    """Seaborn heatmap of mean val CE, one subplot per init_scale value."""
+def plot_cv_heatmap(cv_results, save_path=FIG / "task2" / "cv_hyperparameter_search.png"):
+    """3D scatter of mean val CE over the lr x batch_size x init_scale grid."""
     results = cv_results if isinstance(cv_results, pd.DataFrame) else pd.DataFrame(cv_results)
+
     init_scale_vals = sorted(results["init_scale"].unique())
+    scale_to_idx = {s: i for i, s in enumerate(init_scale_vals)}
 
-    fig, axes = plt.subplots(1, len(init_scale_vals), figsize=(4.5 * len(init_scale_vals), 4), sharey=True)
-    if len(init_scale_vals) == 1:
-        axes = [axes]
+    x = np.log10(results["lr"].values.astype(float))
+    y = np.log10(results["batch_size"].values.astype(float))
+    z = results["init_scale"].map(scale_to_idx).values.astype(float)
+    c = np.log10(results["mean_val_ce"].values.astype(float))
 
-    for ax, scale in zip(axes, init_scale_vals):
-        subset = results[results["init_scale"] == scale]
-        pivot = subset.pivot(index="lr", columns="batch_size", values="mean_val_ce")
-        pivot = pivot.sort_index(ascending=False)
-        sns.heatmap(
-            pivot, ax=ax, cmap="YlOrRd", annot=True, fmt=".3f",
-            annot_kws={"size": 8}, cbar=False,
-            yticklabels=[f"{v:.0e}" if v < 0.01 else str(v) for v in pivot.index],
-        )
-        ax.set_title(f"init_scale = {scale}")
-        ax.set_xlabel("Batch Size")
-        ax.set_ylabel("Learning Rate" if ax is axes[0] else "")
+    fig = plt.figure(figsize=(10, 7))
+    ax = fig.add_subplot(111, projection="3d")
+    sc = ax.scatter(x, y, z, c=c, cmap="viridis", s=60, alpha=0.9, edgecolors="none")
 
-    fig.suptitle("Mean Validation Cross-Entropy (K-Fold CV)")
+    lr_vals = sorted(results["lr"].unique())
+    bs_vals = sorted(results["batch_size"].unique())
+
+    ax.set_xticks(np.log10(lr_vals))
+    ax.set_xticklabels([str(v) for v in lr_vals], fontsize=7)
+    ax.set_yticks(np.log10(bs_vals))
+    ax.set_yticklabels([str(int(v)) for v in bs_vals], fontsize=7)
+    ax.set_zticks(list(range(len(init_scale_vals))))
+    ax.set_zticklabels([str(s) for s in init_scale_vals], fontsize=7)
+
+    ax.set_xlabel("Learning Rate", labelpad=10)
+    ax.set_ylabel("Batch Size", labelpad=10)
+    ax.set_zlabel("Init Scale", labelpad=10)
+    ax.set_title("Mean Validation CE (K-Fold CV)")
+
+    cbar = fig.colorbar(sc, ax=ax, shrink=0.5, pad=0.1)
+    cbar.set_label(r"$\log_{10}$ (Mean Val CE)")
+
     fig.tight_layout()
     save_fig(fig, save_path)
 
@@ -145,13 +156,15 @@ def plot_l1_sparsity(Cs, nnz_counts, save_path=FIG / "task4" / "sparsity.png"):
     save_fig(fig, save_path)
 
 
-def plot_l1_cv_performance(Cs, mean_scores, save_path=FIG / "task4" / "cv_performance.png"):
-    """Mean CV accuracy vs C."""
+def plot_l1_cv_performance(Cs, mean_scores, std_scores=None, save_path=FIG / "task4" / "cv_performance.png"):
+    """Mean CV accuracy vs C with optional shaded std region."""
     fig, ax = plt.subplots(figsize=(8, 5))
-    ax.plot(Cs, mean_scores, marker="o", markersize=4)
+    ax.plot(Cs, mean_scores, marker="o", markersize=4, label="Mean CV Acc")
+    if std_scores is not None:
+        ax.fill_between(Cs, mean_scores - std_scores, mean_scores + std_scores, alpha=0.2)
     ax.set_xscale("log")
     ax.set_xlabel(r"C ($\frac{1}{\lambda}$)")
-    ax.set_ylabel("Mean CV Accuracy")
+    ax.set_ylabel("CV Accuracy")
     ax.set_title("L1 Logistic Regression: CV Performance vs C")
     ax.grid(True, alpha=0.3)
     fig.tight_layout()

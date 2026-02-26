@@ -18,12 +18,8 @@ from plot import (
     plot_lambda_sweep_acc, plot_l1_coef_path, plot_l1_sparsity, plot_l1_cv_performance
 )
 
-# Ignore only the known sklearn warning caused by inconsistent l1_ratio metadata.
-warnings.filterwarnings(
-    "ignore",
-    message="Inconsistent values: penalty=l1 with l1_ratio=0.0.*",
-    category=UserWarning,
-)
+warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore", category=UserWarning)
 
 def train_and_plot_curves(X_train, y_train):
     """Task 1: Train logistic regression with various hyperparams, plot training curves."""
@@ -78,8 +74,8 @@ def tune_hyperparameters(X_train, y_train):
     print(f"\nBest config: lr={best['lr']}, B={best['batch_size']}, init_scale={best['init_scale']}")
     print(f"  val_ce={best['mean_val_ce']:.4f}, val_acc={best['mean_val_acc']:.4f}")
 
-    plot_cv_heatmap(hp_results)
-    return {"lr": best["lr"], "batch_size": best["batch_size"], "init_scale": best["init_scale"]}
+    best_params = {"lr": best["lr"], "batch_size": best["batch_size"], "init_scale": best["init_scale"]}
+    return hp_results, best_params
 
 
 def sweep_regularization(X_train, y_train, X_test, y_test):
@@ -88,7 +84,7 @@ def sweep_regularization(X_train, y_train, X_test, y_test):
 
     lr, bs = 0.1, 16
     lambdas = [0, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1]
-    k = 5
+    k = 20
 
     sweep_results = pd.DataFrame({"lam": lambdas})
     for i, lam in enumerate(lambdas):
@@ -97,9 +93,6 @@ def sweep_regularization(X_train, y_train, X_test, y_test):
         print(f"  lam={lam:.0e}: train_ce={cv_summary['mean_train_ce']:.4f}, "
               f"val_ce={cv_summary['mean_val_ce']:.4f}, "
               f"val_acc={cv_summary['mean_val_acc']:.4f}")
-
-    plot_lambda_sweep(sweep_results)
-    plot_lambda_sweep_acc(sweep_results)
 
     best_idx = sweep_results["mean_val_ce"].idxmin()
     best_lam = sweep_results.loc[best_idx, "lam"]
@@ -117,57 +110,14 @@ def sweep_regularization(X_train, y_train, X_test, y_test):
     test_ce = model.compute_loss(X_te_std, y_te_arr)
     test_acc = np.mean(model.predict(X_te_std) == y_te_arr)
     print(f"Final test results (lam={best_lam:.0e}): CE={test_ce:.4f}, Acc={test_acc:.4f}")
+    return sweep_results
 
-
-# def fit_l1_regularization_path(X_train, y_train, X_test, y_test):
-#     """Task 4: L1 regularization path using sklearn."""
-#     print("\nTask 4: L1 Regularization Path")
-#     X_tr_std, X_te_std, _, _ = standardize(X_train, X_test)
-#     y_tr_arr = y_train.values if hasattr(y_train, 'values') else y_train
-#     y_te_arr = y_test.values if hasattr(y_test, 'values') else y_test
-
-#     Cs = np.logspace(-4, 4, 30)
-#     coef_matrix = np.zeros((len(Cs), X_tr_std.shape[1]))
-#     nnz_counts = np.zeros(len(Cs), dtype=int)
-
-#     prev_model = None
-#     for i, C in enumerate(Cs):
-#         model = LogisticRegression(
-#             C=C, solver="saga", l1_ratio=1, max_iter=10000, tol=1e-4,
-#             warm_start=True, random_state=RANDOM_SEED
-#         )
-#         if prev_model is not None:
-#             model.coef_ = prev_model.coef_.copy()
-#             model.intercept_ = prev_model.intercept_.copy()
-#         model.fit(X_tr_std, y_tr_arr)
-#         prev_model = model
-
-#         coef_matrix[i] = model.coef_[0]
-#         nnz_counts[i] = np.sum(np.abs(coef_matrix[i]) > 0)
-#         print(f"  C={C:.4e}: nnz={nnz_counts[i]}, test_acc={model.score(X_te_std, y_te_arr):.4f}")
-
-#     plot_l1_coef_path(Cs, coef_matrix, FEATURE_NAMES)
-#     plot_l1_sparsity(Cs, nnz_counts)
-
-#     print("  Running LogisticRegressionCV for CV performance plot...")
-#     cv_model = LogisticRegressionCV(
-#         solver="saga", l1_ratios=(1,), Cs=Cs, cv=5,
-#         max_iter=10000, random_state=RANDOM_SEED, scoring="accuracy"
-#     )
-#     cv_model.fit(X_tr_std, y_tr_arr)
-#     mean_scores = cv_model.scores_[1].mean(axis=0)
-
-#     plot_l1_cv_performance(Cs, mean_scores)
-
-#     best_C = cv_model.C_[0]
-#     print(f"  Best C (CV): {best_C:.4e} (lambda={1/best_C:.4e})")
-
-def fit_l1_regularization_path(X_train, y_train, X_test, y_test):
+def fit_and_plot_l1_regularization_path(X_train, y_train, X_test, y_test):
     """Task 4: L1 regularization path using sklearn (no test leakage)."""
     print("\nTask 4: L1 Regularization Path")
 
-    # Standardize once using TRAIN stats for the coefficient path.
-    X_tr_std, _, _, _ = standardize(X_train, X_test)
+    # Standardization
+    X_tr_std, X_te_std, _, _ = standardize(X_train, X_test)
     y_tr_arr = y_train.values if hasattr(y_train, "values") else y_train
     y_te_arr = y_test.values if hasattr(y_test, "values") else y_test
 
@@ -175,7 +125,6 @@ def fit_l1_regularization_path(X_train, y_train, X_test, y_test):
     coef_matrix = np.zeros((len(Cs), X_tr_std.shape[1]))
     nnz_counts = np.zeros(len(Cs), dtype=int)
 
-    # warm_start only helps if we reuse the same estimator instance across C values.
     model = LogisticRegression(
         penalty="l1",
         solver="saga",
@@ -190,17 +139,16 @@ def fit_l1_regularization_path(X_train, y_train, X_test, y_test):
 
         coef_matrix[i] = model.coef_[0]
         nnz_counts[i] = int(np.sum(np.abs(coef_matrix[i]) > 0))
-
-        # Only report training structure statistics during the path.
-        print(f"  C={C:.4e}: nnz={nnz_counts[i]}")
+        test_acc = model.score(X_te_std, y_te_arr)
+        print(f"  C={C:.4e}: nnz={nnz_counts[i]}, test_acc={test_acc:.4f}")
 
     # Plots for the regularization path and sparsity
     plot_l1_coef_path(Cs, coef_matrix, FEATURE_NAMES)
     plot_l1_sparsity(Cs, nnz_counts)
 
-    # CV performance vs C using fold-safe standardization with our own preprocessing.
+    # CV performance vs C using fold-safe standardization 
     print("  Running manual CV for performance plot...")
-    k = 5
+    k = 20
     X_arr = X_train.values if hasattr(X_train, "values") else X_train
     y_arr = y_train.values if hasattr(y_train, "values") else y_train
     folds = get_kfold_indices(len(y_arr), k=k, seed=RANDOM_SEED)
@@ -225,12 +173,13 @@ def fit_l1_regularization_path(X_train, y_train, X_test, y_test):
             cv_scores[fold_i, j] = fold_model.score(X_fold_va_std, y_fold_va)
 
     mean_scores = cv_scores.mean(axis=0)
-    plot_l1_cv_performance(Cs, mean_scores)
+    std_scores = cv_scores.std(axis=0)
+    plot_l1_cv_performance(Cs, mean_scores, std_scores)
 
     best_C = float(Cs[np.argmax(mean_scores)])
     print(f"  Best C (CV): {best_C:.4e} (lambda={1/best_C:.4e})")
 
-    # Evaluate on TEST only once, at the CV-selected C.
+    # Evaluate on test set, at the CV-selected C.
     X_tr_std, X_te_std, _, _ = standardize(X_train, X_test)
     final_model = LogisticRegression(
         penalty="l1",
@@ -255,10 +204,13 @@ if __name__ == "__main__":
     train_and_plot_curves(X_train, y_train)
 
     # Task 2: K-fold CV hyperparameter tuning
-    best_params = tune_hyperparameters(X_train, y_train)
+    hp_results, best_params = tune_hyperparameters(X_train, y_train)
+    plot_cv_heatmap(hp_results)
 
     # Task 3: Lambda sweep with K-fold CV
-    sweep_regularization(X_train, y_train, X_test, y_test)
+    sweep_results = sweep_regularization(X_train, y_train, X_test, y_test)
+    plot_lambda_sweep(sweep_results)
+    plot_lambda_sweep_acc(sweep_results)
 
     # Task 4: L1 regularization path (sklearn)
-    fit_l1_regularization_path(X_train, y_train, X_test, y_test)
+    fit_and_plot_l1_regularization_path(X_train, y_train, X_test, y_test)
