@@ -70,12 +70,14 @@ Runtime settings are stored in `config.ini` at the project root and validated vi
 [settings]
 random_seed = 2026
 show_inline_plots = true
+verbose = true
 ```
 
 | Setting | Type | Description |
 |---------|------|-------------|
 | `random_seed` | int | Seed for all random number generators (reproducibility) |
 | `show_inline_plots` | bool | Whether to display plots interactively (set to `false` for headless runs) |
+| `verbose` | bool | Whether to print per-task result DataFrames after each loop (set to `false` for cleaner output) |
 
 ## Running
 

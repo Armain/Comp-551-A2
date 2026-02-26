@@ -12,4 +12,5 @@ dependencies = [
     "pydantic>=2.12.5",
     "scikit-learn>=1.8.0",
     "seaborn>=0.13.2",
+    "tqdm>=4.67.3",
 ]

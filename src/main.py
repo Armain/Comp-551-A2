@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 from sklearn.linear_model import LogisticRegression
+from tqdm import tqdm
 
 cwd = Path(__file__).parent.parent
 
@@ -13,6 +14,7 @@ from preprocessing import (
 )
 from models import LogisticRegressionSGD
 from evaluation import kfold_cv
+from utils import config
 from plot import (
     plot_training_curves, plot_hp_grid_par_coords, plot_lambda_sweep,
     plot_lambda_sweep_acc, plot_l1_coef_path, plot_l1_sparsity, plot_l1_cv_performance
@@ -21,14 +23,17 @@ from plot import (
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
 
-def train_and_plot_curves(X_train: pd.DataFrame, y_train: pd.Series) -> None:
+def train_and_plot_curves(X_train: pd.DataFrame, y_train: pd.Series) -> pd.DataFrame:
     """Train models across a hyperparameter grid and save training curve plots.
 
     Args:
         X_train: Feature matrix of shape (n_samples, n_features).
         y_train: Binary spam labels.
+
+    Returns:
+        training_curves DataFrame with per-config train loss history and final metrics.
     """
-    print("\nTask 1: Training Curves")
+    print("\nTask 1: Training Curves for Logistic Regression SGD")
     X_tr_std, _, _, _ = standardize(X_train)
 
     batch_sizes = [1, 16, 64]
@@ -39,17 +44,21 @@ def train_and_plot_curves(X_train: pd.DataFrame, y_train: pd.Series) -> None:
     configs = list(itertools.product(lambdas, batch_sizes, learning_rates))
     training_curves = pd.DataFrame(configs, columns=["lam", "batch_size", "lr"])
     training_curves["train_loss"] = None
+    training_curves["final_loss"] = np.nan
+    training_curves["final_acc"] = np.nan
 
-    for i, (lam, bs, lr) in enumerate(configs):
+    for i, (lam, bs, lr) in tqdm(enumerate(configs), total=len(configs)):
         model = LogisticRegressionSGD(
             n_features=X_tr_std.shape[1], lr=lr, lam=lam, batch_size=bs
         )
         rng = np.random.default_rng(RANDOM_SEED)
         history = model.fit(X_tr_std, y_train.values, max_epochs=epochs, rng=rng)
         training_curves.at[i, "train_loss"] = history["train_loss"]
-        print(f"  lam={lam}, B={bs}, lr={lr}: "
-              f"loss={history['train_loss'][-1]:.4f}, acc={history['train_acc'][-1]:.4f}")
+        training_curves.at[i, "final_loss"] = history["train_loss"][-1]
+        training_curves.at[i, "final_acc"] = history["train_acc"][-1]
 
+    if config.verbose:
+        print(training_curves[["lam", "batch_size", "lr", "final_loss", "final_acc"]].to_string(index=False))
     return training_curves
 
 
@@ -68,17 +77,18 @@ def tune_hyperparameters(X_train: pd.DataFrame, y_train: pd.Series) -> tuple[pd.
     learning_rates = [1, 0.1, 0.01, 0.001, 0.0001]
     batch_sizes = [1, 4, 16, 32, 64]
     init_scales = [0.0, 0.001, 0.01, 0.1, 1.0]
+    lam = 1e-3
     k = 5
 
     hp_grid = list(itertools.product(learning_rates, batch_sizes, init_scales))
     hp_results = pd.DataFrame(hp_grid, columns=["lr", "batch_size", "init_scale"])
 
-    for i, (lr, bs, scale) in enumerate(hp_grid):
-        cv_summary = kfold_cv(X_train, y_train, k=k, lr=lr, batch_size=bs, init_scale=scale)
+    for i, (lr, bs, scale) in tqdm(enumerate(hp_grid), total=len(hp_grid), desc="Grid Search:"):
+        cv_summary = kfold_cv(X_train, y_train, k=k, lr=lr, batch_size=bs, lam=lam, init_scale=scale)
         hp_results.loc[i, cv_summary.index] = cv_summary
-        print(f"  lr={lr}, B={bs}, init_scale={scale}: "
-              f"val_ce={cv_summary['mean_val_ce']:.4f} +/- {cv_summary['std_val_ce']:.4f}, "
-              f"val_acc={cv_summary['mean_val_acc']:.4f}")
+
+    if config.verbose:
+        print(hp_results[["lr", "batch_size", "init_scale", "mean_val_ce", "std_val_ce", "mean_val_acc"]].to_string(index=False))
 
     best = hp_results.loc[hp_results["mean_val_ce"].idxmin()]
     print(f"\nBest config: lr={best['lr']}, B={best['batch_size']}, init_scale={best['init_scale']}")
@@ -110,12 +120,12 @@ def sweep_regularization(
     k = 20
 
     sweep_results = pd.DataFrame({"lam": lambdas})
-    for i, lam in enumerate(lambdas):
+    for i, lam in tqdm(enumerate(lambdas), total=len(lambdas)):
         cv_summary = kfold_cv(X_train, y_train, k=k, lr=lr, batch_size=bs, lam=lam)
         sweep_results.loc[i, cv_summary.index] = cv_summary
-        print(f"  lam={lam:.0e}: train_ce={cv_summary['mean_train_ce']:.4f}, "
-              f"val_ce={cv_summary['mean_val_ce']:.4f}, "
-              f"val_acc={cv_summary['mean_val_acc']:.4f}")
+
+    if config.verbose:
+        print(sweep_results[["lam", "mean_train_ce", "std_train_ce", "mean_val_ce", "std_val_ce", "mean_val_acc"]].to_string(index=False))
 
     best_idx = sweep_results["mean_val_ce"].idxmin()
     best_lam = sweep_results.loc[best_idx, "lam"]
@@ -133,10 +143,11 @@ def sweep_regularization(
     print(f"Final test results (lam={best_lam:.0e}): CE={test_ce:.4f}, Acc={test_acc:.4f}")
     return sweep_results
 
+
 def fit_and_plot_l1_regularization_path(
     X_train: pd.DataFrame, y_train: pd.Series,
     X_test: pd.DataFrame, y_test: pd.Series,
-) -> None:
+) -> pd.DataFrame:
     """Fit L1 regularization path, run fold-safe CV, and evaluate at the best C.
 
     Args:
@@ -144,6 +155,9 @@ def fit_and_plot_l1_regularization_path(
         y_train: Training labels.
         X_test: Test feature matrix.
         y_test: Test labels.
+
+    Returns:
+        l1_path_results DataFrame with C, nnz, and test_acc per regularization value.
     """
     print("\nTask 4: L1 Regularization Path")
 
@@ -152,46 +166,40 @@ def fit_and_plot_l1_regularization_path(
     Cs = np.logspace(-4, 4, 30)
     coef_matrix = np.zeros((len(Cs), X_tr_std.shape[1]))
     nnz_counts = np.zeros(len(Cs), dtype=int)
+    l1_path_results = pd.DataFrame({"C": Cs})
 
     model = LogisticRegression(
-        penalty="l1",
-        solver="saga",
-        max_iter=10000,
-        tol=1e-4,
-        warm_start=True,
-        random_state=RANDOM_SEED
+        penalty="l1", solver="saga", max_iter=10000,
+        tol=1e-4, warm_start=True, random_state=RANDOM_SEED
     )
-    for i, C in enumerate(Cs):
+    for i, C in tqdm(enumerate(Cs), total=len(Cs), desc="L1 Reg Path"):
         model.set_params(C=C)
         model.fit(X_tr_std, y_train.values)
-
         coef_matrix[i] = model.coef_[0]
         nnz_counts[i] = int(np.sum(np.abs(coef_matrix[i]) > 0))
-        test_acc = model.score(X_te_std, y_test.values)
-        print(f"  C={C:.4e}: nnz={nnz_counts[i]}, test_acc={test_acc:.4f}")
+        l1_path_results.at[i, "nnz"] = nnz_counts[i]
+        l1_path_results.at[i, "test_acc"] = model.score(X_te_std, y_test.values)
+
+    if config.verbose:
+        print(l1_path_results.to_string(index=False))
 
     plot_l1_coef_path(Cs, coef_matrix, FEATURE_NAMES)
     plot_l1_sparsity(Cs, nnz_counts)
 
-    print("  Running manual CV for performance plot...")
     k = 20
     X_arr = X_train.values
     y_arr = y_train.values
     folds = get_kfold_indices(len(y_arr), k=k, seed=RANDOM_SEED)
 
     cv_scores = np.zeros((k, len(Cs)))
-    for fold_i, (train_idx, val_idx) in enumerate(folds):
+    for fold_i, (train_idx, val_idx) in tqdm(enumerate(folds), total=k, desc="L1 Reg CV"):
         X_fold_tr, X_fold_va = X_arr[train_idx], X_arr[val_idx]
         y_fold_tr, y_fold_va = y_arr[train_idx], y_arr[val_idx]
         X_fold_tr_std, X_fold_va_std, _, _ = standardize(X_fold_tr, X_fold_va)
 
         fold_model = LogisticRegression(
-            penalty="l1",
-            solver="saga",
-            max_iter=10000,
-            tol=1e-4,
-            warm_start=True,
-            random_state=RANDOM_SEED
+            penalty="l1", solver="saga", max_iter=10000,
+            tol=1e-4, warm_start=True, random_state=RANDOM_SEED
         )
         for j, C in enumerate(Cs):
             fold_model.set_params(C=C)
@@ -203,22 +211,18 @@ def fit_and_plot_l1_regularization_path(
     plot_l1_cv_performance(Cs, mean_scores, std_scores)
 
     best_C = float(Cs[np.argmax(mean_scores)])
-    print(f"  Best C (CV): {best_C:.4e} (lambda={1/best_C:.4e})")
+    print(f"Best C (CV): {best_C:.4e} (lambda={1/best_C:.4e})")
 
-    # Evaluate on test set, at the CV-selected C.
     X_tr_std, X_te_std, _, _ = standardize(X_train, X_test)
     final_model = LogisticRegression(
-        penalty="l1",
-        C=best_C,
-        solver="saga",
-        max_iter=10000,
-        tol=1e-4,
-        random_state=RANDOM_SEED
+        penalty="l1", C=best_C, solver="saga",
+        max_iter=10000, tol=1e-4, random_state=RANDOM_SEED
     )
     final_model.fit(X_tr_std, y_train.values)
     test_acc = final_model.score(X_te_std, y_test.values)
-    print(f"  One-time L1 test accuracy at CV-selected C: {test_acc:.4f}")
+    print(f"L1 test accuracy at CV-selected C: {test_acc:.4f}")
 
+    return l1_path_results
 
 if __name__ == "__main__":
     X, y = load_data(cwd / "data")
@@ -240,4 +244,4 @@ if __name__ == "__main__":
     plot_lambda_sweep_acc(sweep_results)
 
     # Task 4: L1 regularization path (sklearn)
-    fit_and_plot_l1_regularization_path(X_train, y_train, X_test, y_test)
+    l1_path_results = fit_and_plot_l1_regularization_path(X_train, y_train, X_test, y_test)

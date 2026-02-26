@@ -8,6 +8,7 @@ CONFIG_PATH = Path(__file__).parent.parent / "config.ini"
 class Settings(BaseModel):
     random_seed: int
     show_inline_plots: bool
+    verbose: bool
 
 
 def load_config(path: Path = CONFIG_PATH) -> Settings:
@@ -24,6 +25,7 @@ def load_config(path: Path = CONFIG_PATH) -> Settings:
     return Settings(
         random_seed=parser.getint("settings", "random_seed"),
         show_inline_plots=parser.getboolean("settings", "show_inline_plots"),
+        verbose=parser.getboolean("settings", "verbose"),
     )
 
 

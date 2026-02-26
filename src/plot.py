@@ -39,7 +39,7 @@ def plot_training_curves(
     batch_sizes = sorted(training_curves["batch_size"].unique())
     lam_vals = sorted(training_curves["lam"].unique())
 
-    fig, axes = plt.subplots(len(lam_vals), len(batch_sizes), figsize=(5 * len(batch_sizes), 7), sharey=True)
+    fig, axes = plt.subplots(len(lam_vals), len(batch_sizes), figsize=(4 * len(batch_sizes), 8), sharey=True)
 
     for row, lam in enumerate(lam_vals):
         for col, bs in enumerate(batch_sizes):
@@ -53,9 +53,7 @@ def plot_training_curves(
             ax.set_title(rf"Batch Size={bs}  [$\lambda={lam}$]")
             if col == 0:
                 ax.set_ylabel("Training Cross-Entropy")
-
-    handles, labels = axes[0][0].get_legend_handles_labels()
-    axes[0][-1].legend(handles[::-1], labels[::-1], fontsize=8, loc="upper right")
+            ax.legend(fontsize=8, loc='lower right')
     fig.suptitle("Training Curves")
     fig.tight_layout()
     save_fig(fig, save_path)
@@ -86,7 +84,7 @@ def plot_hp_grid_par_coords(
             color=ce_log,
             colorscale="aggrnyl",
             showscale=True,
-            colorbar=dict(title="log Val CE"),
+            colorbar=dict(title="Log Validation Cross Entropy"),
         ),
         dimensions=[
             dict(
@@ -142,7 +140,7 @@ def plot_lambda_sweep(
     ax.set_xscale("symlog", linthresh=1e-7)
     ax.set_xlabel(r"$\lambda$")
     ax.set_ylabel("Cross-Entropy")
-    ax.set_title(r"Bias-Variance Trade-off: CE vs $\lambda$")
+    ax.set_title(r"Bias-Variance Trade-off: Cross Entropy vs $\lambda$")
     ax.legend()
     ax.grid(True, alpha=0.3)
     fig.tight_layout()
