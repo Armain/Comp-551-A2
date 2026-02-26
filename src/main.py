@@ -23,17 +23,21 @@ from plot import (
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
 
-def train_and_plot_curves(X_train: pd.DataFrame, y_train: pd.Series) -> pd.DataFrame:
+def train_and_plot_curves(X_train: pd.DataFrame, y_train: pd.Series, use_adam: bool = False) -> pd.DataFrame:
     """Train models across a hyperparameter grid and save training curve plots.
 
     Args:
         X_train: Feature matrix of shape (n_samples, n_features).
         y_train: Binary spam labels.
+        use_adam: If True, use Adam optimizer; otherwise use vanilla SGD.
 
     Returns:
         training_curves DataFrame with per-config train loss history and final metrics.
     """
-    print("\nTask 1: Training Curves for Logistic Regression SGD")
+    if use_adam:
+        print("\nTask 1: Training Curves for Logistic Regression SGD")
+    else:
+        print("\nTask 1: Training Curves for Logistic Regression SGD")
     X_tr_std, _, _, _ = standardize(X_train)
 
     batch_sizes = [1, 16, 64]
@@ -49,7 +53,7 @@ def train_and_plot_curves(X_train: pd.DataFrame, y_train: pd.Series) -> pd.DataF
 
     for i, (lam, bs, lr) in tqdm(enumerate(configs), total=len(configs)):
         model = LogisticRegressionSGD(
-            n_features=X_tr_std.shape[1], lr=lr, lam=lam, batch_size=bs
+            n_features=X_tr_std.shape[1], lr=lr, lam=lam, batch_size=bs, use_adam=use_adam
         )
         rng = np.random.default_rng(RANDOM_SEED)
         history = model.fit(X_tr_std, y_train.values, max_epochs=epochs, rng=rng)
@@ -63,7 +67,7 @@ def train_and_plot_curves(X_train: pd.DataFrame, y_train: pd.Series) -> pd.DataF
 
 
 def tune_hyperparameters(X_train: pd.DataFrame, y_train: pd.Series) -> tuple[pd.DataFrame, dict]:
-    """Run 5-fold CV over a 5x5x5 hyperparameter grid and return results and best config.
+    """Run 5-fold CV over a randomized search (50 SGD + 50 Adam configs).
 
     Args:
         X_train: Feature matrix of shape (n_samples, n_features).
@@ -72,29 +76,63 @@ def tune_hyperparameters(X_train: pd.DataFrame, y_train: pd.Series) -> tuple[pd.
     Returns:
         Tuple of (hp_results DataFrame with CV metrics, best_params dict).
     """
-    print("\nTask 2: Hyperparameter Tuning (K-Fold CV)")
+    print("\nTask 2: Hyperparameter Tuning (Randomized Search CV)")
 
-    learning_rates = [1, 0.1, 0.01, 0.001, 0.0001]
-    batch_sizes = [1, 4, 16, 32, 64]
-    init_scales = [0.0, 0.001, 0.01, 0.1, 1.0]
-    lam = 1e-3
     k = 5
+    n_each = 50
+    batch_options = [1, 4, 16, 32, 64]
+    scale_options = [0.0, 0.001, 0.01, 0.1, 1.0]
+    rng_hp = np.random.default_rng(RANDOM_SEED)
 
-    hp_grid = list(itertools.product(learning_rates, batch_sizes, init_scales))
-    hp_results = pd.DataFrame(hp_grid, columns=["lr", "batch_size", "init_scale"])
+    sgd_results = pd.DataFrame({
+        "lr":          10 ** rng_hp.uniform(np.log10(1e-4), 0.0, n_each),
+        "batch_size":  rng_hp.choice(batch_options, n_each).astype(int),
+        "init_scale":  rng_hp.choice(scale_options, n_each),
+        "lam":         10 ** rng_hp.uniform(np.log10(1e-6), 0.0, n_each),
+        "use_adam":    False,
+        "mean_val_ce": np.nan, "std_val_ce": np.nan, "mean_val_acc": np.nan,
+    })
 
-    for i, (lr, bs, scale) in tqdm(enumerate(hp_grid), total=len(hp_grid), desc="Grid Search:"):
-        cv_summary = kfold_cv(X_train, y_train, k=k, lr=lr, batch_size=bs, lam=lam, init_scale=scale)
-        hp_results.loc[i, cv_summary.index] = cv_summary
+    adam_results = pd.DataFrame({
+        "lr":          10 ** rng_hp.uniform(np.log10(1e-4), 0.0, n_each),
+        "batch_size":  rng_hp.choice(batch_options, n_each).astype(int),
+        "init_scale":  rng_hp.choice(scale_options, n_each),
+        "lam":         10 ** rng_hp.uniform(np.log10(1e-6), 0.0, n_each),
+        "use_adam":    True,
+        "beta1":       rng_hp.uniform(0.85, 0.999, n_each),
+        "beta2":       rng_hp.uniform(0.99, 0.9999, n_each),
+        "mean_val_ce": np.nan, "std_val_ce": np.nan, "mean_val_acc": np.nan,
+    })
+
+    for i, row in tqdm(sgd_results.iterrows(), total=n_each, desc="SGD Search"):
+        cv_summary = kfold_cv(X_train, y_train, k=k, lr=row["lr"], batch_size=int(row["batch_size"]),
+                              lam=row["lam"], init_scale=row["init_scale"])
+        sgd_results.loc[i, cv_summary.index] = cv_summary
+
+    for i, row in tqdm(adam_results.iterrows(), total=n_each, desc="Adam Search"):
+        cv_summary = kfold_cv(X_train, y_train, k=k, lr=row["lr"], batch_size=int(row["batch_size"]),
+                              lam=row["lam"], init_scale=row["init_scale"],
+                              use_adam=True, beta1=row["beta1"], beta2=row["beta2"])
+        adam_results.loc[i, cv_summary.index] = cv_summary
+
+    hp_results = pd.concat([sgd_results, adam_results], ignore_index=True)
 
     if config.verbose:
-        print(hp_results[["lr", "batch_size", "init_scale", "mean_val_ce", "std_val_ce", "mean_val_acc"]].to_string(index=False))
+        print(hp_results[["lr", "batch_size", "init_scale", "lam", "use_adam", "mean_val_ce", "mean_val_acc"]].to_string(index=False))
 
     best = hp_results.loc[hp_results["mean_val_ce"].idxmin()]
-    print(f"\nBest config: lr={best['lr']}, B={best['batch_size']}, init_scale={best['init_scale']}")
+    print(f"\nBest config: lr={best['lr']:.4e}, B={int(best['batch_size'])}, "
+          f"init_scale={best['init_scale']}, lam={best['lam']:.4e}, use_adam={best['use_adam']}")
     print(f"  val_ce={best['mean_val_ce']:.4f}, val_acc={best['mean_val_acc']:.4f}")
 
-    best_params = {"lr": best["lr"], "batch_size": best["batch_size"], "init_scale": best["init_scale"]}
+    best_params: dict = {
+        "lr": best["lr"], "batch_size": int(best["batch_size"]),
+        "init_scale": best["init_scale"], "lam": best["lam"],
+        "use_adam": bool(best["use_adam"]),
+    }
+    if best_params["use_adam"]:
+        best_params["beta1"] = best["beta1"]
+        best_params["beta2"] = best["beta2"]
     return hp_results, best_params
 
 
@@ -230,18 +268,23 @@ if __name__ == "__main__":
     print(f"Train: {X_train.shape[0]}, Test: {X_test.shape[0]}")
     print(f"Train spam ratio: {y_train.mean():.3f}")
 
-    # Task 1: Training curves across hyperparameter grid
-    training_curves = train_and_plot_curves(X_train, y_train)
-    plot_training_curves(training_curves)
+    # %% Task 1: Training curves across hyperparameter grid
+    training_curves_sgd = train_and_plot_curves(X_train, y_train, use_adam=False)
+    plot_training_curves(training_curves_sgd, title="Training Curves (SGD)",
+                         save_path=cwd / "figures" / "task1" / "training_curves_sgd.png")
 
-    # Task 2: K-fold CV hyperparameter tuning
+    training_curves_adam = train_and_plot_curves(X_train, y_train, use_adam=True)
+    plot_training_curves(training_curves_adam, title="Training Curves (Adam)",
+                         save_path=cwd / "figures" / "task1" / "training_curves_adam.png")
+
+    # %% Task 2: K-fold CV hyperparameter tuning
     hp_results, best_params = tune_hyperparameters(X_train, y_train)
     plot_hp_grid_par_coords(hp_results)
 
-    # Task 3: Lambda sweep with K-fold CV
+    # %% Task 3: Lambda sweep with K-fold CV
     sweep_results = sweep_regularization(X_train, y_train, X_test, y_test)
     plot_lambda_sweep(sweep_results)
     plot_lambda_sweep_acc(sweep_results)
 
-    # Task 4: L1 regularization path (sklearn)
+    # %% Task 4: L1 regularization path (sklearn)
     l1_path_results = fit_and_plot_l1_regularization_path(X_train, y_train, X_test, y_test)

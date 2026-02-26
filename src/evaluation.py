@@ -42,6 +42,9 @@ def kfold_cv(
     max_epochs: int = 200,
     patience: int = 10,
     seed: int = RANDOM_SEED,
+    use_adam: bool = False,
+    beta1: float = 0.9,
+    beta2: float = 0.999,
 ) -> pd.Series:
     """Run K-fold CV with per-fold standardization and early stopping on val loss.
 
@@ -56,6 +59,9 @@ def kfold_cv(
         max_epochs: Maximum training epochs per fold.
         patience: Early stopping patience in epochs.
         seed: Random seed for fold splits and model init.
+        use_adam: Use Adam optimizer instead of vanilla SGD.
+        beta1: Adam exponential decay rate for the first moment.
+        beta2: Adam exponential decay rate for the second moment.
 
     Returns:
         pd.Series with mean_ and std_ prefixed metrics across folds.
@@ -79,6 +85,7 @@ def kfold_cv(
         model = LogisticRegressionSGD(
             n_features=X_tr.shape[1], lr=lr, lam=lam,
             batch_size=batch_size, init_scale=init_scale, rng=rng,
+            use_adam=use_adam, beta1=beta1, beta2=beta2,
         )
         model.fit(X_tr_std, y_tr, max_epochs=max_epochs, rng=rng,
                   X_val=X_va_std, y_val=y_va, patience=patience)

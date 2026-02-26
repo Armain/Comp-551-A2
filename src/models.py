@@ -2,7 +2,7 @@ import numpy as np
 
 
 class LogisticRegressionSGD:
-    """Logistic regression trained with mini-batch SGD and L2 regularization.
+    """Logistic regression trained with mini-batch SGD (or Adam) and L2 regularization.
 
     Regularization convention: lambda * ||w||_2^2 (gradient term: 2*lambda*w).
     Bias is excluded from the penalty.
@@ -16,6 +16,9 @@ class LogisticRegressionSGD:
         batch_size: int = 16,
         init_scale: float = 0.0,
         rng: np.random.Generator | None = None,
+        use_adam: bool = False,
+        beta1: float = 0.9,
+        beta2: float = 0.999,
     ) -> None:
         """Initialise weights, bias, and hyperparameters.
 
@@ -26,6 +29,9 @@ class LogisticRegressionSGD:
             batch_size: Mini-batch size.
             init_scale: Std of Gaussian weight init; 0.0 uses zero init.
             rng: Optional random generator for weight initialisation.
+            use_adam: Use Adam optimizer instead of vanilla SGD.
+            beta1: Adam exponential decay rate for the first moment.
+            beta2: Adam exponential decay rate for the second moment.
         """
         if init_scale == 0.0:
             self.w = np.zeros(n_features)
@@ -36,6 +42,15 @@ class LogisticRegressionSGD:
         self.lr = lr
         self.lam = lam
         self.batch_size = batch_size
+        self.use_adam = use_adam
+        self.beta1 = beta1
+        self.beta2 = beta2
+        if use_adam:
+            self.m_w = np.zeros(n_features)
+            self.v_w = np.zeros(n_features)
+            self.m_b = 0.0
+            self.v_b = 0.0
+            self.t = 0
 
     @staticmethod
     def sigmoid(z: np.ndarray) -> np.ndarray:
@@ -105,7 +120,7 @@ class LogisticRegressionSGD:
         return self.cross_entropy(y, self.predict_proba(X))
 
     def fit_epoch(self, X: np.ndarray, y: np.ndarray, rng: np.random.Generator) -> None:
-        """Run one epoch of shuffled mini-batch SGD in-place.
+        """Run one epoch of shuffled mini-batch SGD (or Adam) in-place.
 
         Args:
             X: Feature matrix of shape (n, d).
@@ -126,8 +141,23 @@ class LogisticRegressionSGD:
 
             grad_w = (X_b.T @ error) / B + 2 * self.lam * self.w
             grad_b = error.sum() / B
-            self.w -= self.lr * grad_w
-            self.b -= self.lr * grad_b
+
+            if self.use_adam:
+                eps = 1e-8
+                self.t += 1
+                self.m_w = self.beta1 * self.m_w + (1 - self.beta1) * grad_w
+                self.v_w = self.beta2 * self.v_w + (1 - self.beta2) * grad_w ** 2
+                self.m_b = self.beta1 * self.m_b + (1 - self.beta1) * grad_b
+                self.v_b = self.beta2 * self.v_b + (1 - self.beta2) * grad_b ** 2
+                m_w_hat = self.m_w / (1 - self.beta1 ** self.t)
+                v_w_hat = self.v_w / (1 - self.beta2 ** self.t)
+                m_b_hat = self.m_b / (1 - self.beta1 ** self.t)
+                v_b_hat = self.v_b / (1 - self.beta2 ** self.t)
+                self.w -= self.lr * m_w_hat / (np.sqrt(v_w_hat) + eps)
+                self.b -= self.lr * m_b_hat / (np.sqrt(v_b_hat) + eps)
+            else:
+                self.w -= self.lr * grad_w
+                self.b -= self.lr * grad_b
 
     def fit(
         self,
