@@ -121,7 +121,7 @@ show_inline_plots = true
 - **Data split**: 5% train (~230 samples), 95% test
 - **L2 convention**: `lambda * ||w||_2^2` with gradient term `2*lambda*w` (bias excluded)
 - **K-fold CV**: Standardization is fit per fold on the fold's training portion only (no leakage)
-- **Task 4**: Uses sklearn `LogisticRegression` with `l1_ratio=1` (pure L1) and `solver="saga"`
+- **Task 4**: Uses sklearn `LogisticRegression` with `penalty="l1"` and `solver="saga"` (pure L1)
 
 ## Troubleshooting
 

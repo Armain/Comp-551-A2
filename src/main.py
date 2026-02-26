@@ -4,11 +4,13 @@ import warnings
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
+from sklearn.linear_model import LogisticRegression
 
 cwd = Path(__file__).parent.parent
 
-from preprocessing import load_data, train_test_split, standardize, RANDOM_SEED, FEATURE_NAMES
+from preprocessing import (
+    load_data, train_test_split, standardize, get_kfold_indices, RANDOM_SEED, FEATURE_NAMES
+)
 from models import LogisticRegressionSGD
 from evaluation import kfold_cv
 from plot import (
@@ -16,7 +18,12 @@ from plot import (
     plot_lambda_sweep_acc, plot_l1_coef_path, plot_l1_sparsity, plot_l1_cv_performance
 )
 
-warnings.simplefilter(action='ignore', category=FutureWarning)
+# Ignore only the known sklearn warning caused by inconsistent l1_ratio metadata.
+warnings.filterwarnings(
+    "ignore",
+    message="Inconsistent values: penalty=l1 with l1_ratio=0.0.*",
+    category=UserWarning,
+)
 
 def train_and_plot_curves(X_train, y_train):
     """Task 1: Train logistic regression with various hyperparams, plot training curves."""
@@ -112,48 +119,130 @@ def sweep_regularization(X_train, y_train, X_test, y_test):
     print(f"Final test results (lam={best_lam:.0e}): CE={test_ce:.4f}, Acc={test_acc:.4f}")
 
 
+# def fit_l1_regularization_path(X_train, y_train, X_test, y_test):
+#     """Task 4: L1 regularization path using sklearn."""
+#     print("\nTask 4: L1 Regularization Path")
+#     X_tr_std, X_te_std, _, _ = standardize(X_train, X_test)
+#     y_tr_arr = y_train.values if hasattr(y_train, 'values') else y_train
+#     y_te_arr = y_test.values if hasattr(y_test, 'values') else y_test
+
+#     Cs = np.logspace(-4, 4, 30)
+#     coef_matrix = np.zeros((len(Cs), X_tr_std.shape[1]))
+#     nnz_counts = np.zeros(len(Cs), dtype=int)
+
+#     prev_model = None
+#     for i, C in enumerate(Cs):
+#         model = LogisticRegression(
+#             C=C, solver="saga", l1_ratio=1, max_iter=10000, tol=1e-4,
+#             warm_start=True, random_state=RANDOM_SEED
+#         )
+#         if prev_model is not None:
+#             model.coef_ = prev_model.coef_.copy()
+#             model.intercept_ = prev_model.intercept_.copy()
+#         model.fit(X_tr_std, y_tr_arr)
+#         prev_model = model
+
+#         coef_matrix[i] = model.coef_[0]
+#         nnz_counts[i] = np.sum(np.abs(coef_matrix[i]) > 0)
+#         print(f"  C={C:.4e}: nnz={nnz_counts[i]}, test_acc={model.score(X_te_std, y_te_arr):.4f}")
+
+#     plot_l1_coef_path(Cs, coef_matrix, FEATURE_NAMES)
+#     plot_l1_sparsity(Cs, nnz_counts)
+
+#     print("  Running LogisticRegressionCV for CV performance plot...")
+#     cv_model = LogisticRegressionCV(
+#         solver="saga", l1_ratios=(1,), Cs=Cs, cv=5,
+#         max_iter=10000, random_state=RANDOM_SEED, scoring="accuracy"
+#     )
+#     cv_model.fit(X_tr_std, y_tr_arr)
+#     mean_scores = cv_model.scores_[1].mean(axis=0)
+
+#     plot_l1_cv_performance(Cs, mean_scores)
+
+#     best_C = cv_model.C_[0]
+#     print(f"  Best C (CV): {best_C:.4e} (lambda={1/best_C:.4e})")
+
 def fit_l1_regularization_path(X_train, y_train, X_test, y_test):
-    """Task 4: L1 regularization path using sklearn."""
+    """Task 4: L1 regularization path using sklearn (no test leakage)."""
     print("\nTask 4: L1 Regularization Path")
-    X_tr_std, X_te_std, _, _ = standardize(X_train, X_test)
-    y_tr_arr = y_train.values if hasattr(y_train, 'values') else y_train
-    y_te_arr = y_test.values if hasattr(y_test, 'values') else y_test
+
+    # Standardize once using TRAIN stats for the coefficient path.
+    X_tr_std, _, _, _ = standardize(X_train, X_test)
+    y_tr_arr = y_train.values if hasattr(y_train, "values") else y_train
+    y_te_arr = y_test.values if hasattr(y_test, "values") else y_test
 
     Cs = np.logspace(-4, 4, 30)
     coef_matrix = np.zeros((len(Cs), X_tr_std.shape[1]))
     nnz_counts = np.zeros(len(Cs), dtype=int)
 
-    prev_model = None
+    # warm_start only helps if we reuse the same estimator instance across C values.
+    model = LogisticRegression(
+        penalty="l1",
+        solver="saga",
+        max_iter=10000,
+        tol=1e-4,
+        warm_start=True,
+        random_state=RANDOM_SEED
+    )
     for i, C in enumerate(Cs):
-        model = LogisticRegression(
-            C=C, solver="saga", l1_ratio=1, max_iter=10000, tol=1e-4,
-            warm_start=True, random_state=RANDOM_SEED
-        )
-        if prev_model is not None:
-            model.coef_ = prev_model.coef_.copy()
-            model.intercept_ = prev_model.intercept_.copy()
+        model.set_params(C=C)
         model.fit(X_tr_std, y_tr_arr)
-        prev_model = model
 
         coef_matrix[i] = model.coef_[0]
-        nnz_counts[i] = np.sum(np.abs(coef_matrix[i]) > 0)
-        print(f"  C={C:.4e}: nnz={nnz_counts[i]}, test_acc={model.score(X_te_std, y_te_arr):.4f}")
+        nnz_counts[i] = int(np.sum(np.abs(coef_matrix[i]) > 0))
 
+        # Only report training structure statistics during the path.
+        print(f"  C={C:.4e}: nnz={nnz_counts[i]}")
+
+    # Plots for the regularization path and sparsity
     plot_l1_coef_path(Cs, coef_matrix, FEATURE_NAMES)
     plot_l1_sparsity(Cs, nnz_counts)
 
-    print("  Running LogisticRegressionCV for CV performance plot...")
-    cv_model = LogisticRegressionCV(
-        solver="saga", l1_ratios=(1,), Cs=Cs, cv=5,
-        max_iter=10000, random_state=RANDOM_SEED, scoring="accuracy"
-    )
-    cv_model.fit(X_tr_std, y_tr_arr)
-    mean_scores = cv_model.scores_[1].mean(axis=0)
+    # CV performance vs C using fold-safe standardization with our own preprocessing.
+    print("  Running manual CV for performance plot...")
+    k = 5
+    X_arr = X_train.values if hasattr(X_train, "values") else X_train
+    y_arr = y_train.values if hasattr(y_train, "values") else y_train
+    folds = get_kfold_indices(len(y_arr), k=k, seed=RANDOM_SEED)
 
+    cv_scores = np.zeros((k, len(Cs)))
+    for fold_i, (train_idx, val_idx) in enumerate(folds):
+        X_fold_tr, X_fold_va = X_arr[train_idx], X_arr[val_idx]
+        y_fold_tr, y_fold_va = y_arr[train_idx], y_arr[val_idx]
+        X_fold_tr_std, X_fold_va_std, _, _ = standardize(X_fold_tr, X_fold_va)
+
+        fold_model = LogisticRegression(
+            penalty="l1",
+            solver="saga",
+            max_iter=10000,
+            tol=1e-4,
+            warm_start=True,
+            random_state=RANDOM_SEED
+        )
+        for j, C in enumerate(Cs):
+            fold_model.set_params(C=C)
+            fold_model.fit(X_fold_tr_std, y_fold_tr)
+            cv_scores[fold_i, j] = fold_model.score(X_fold_va_std, y_fold_va)
+
+    mean_scores = cv_scores.mean(axis=0)
     plot_l1_cv_performance(Cs, mean_scores)
 
-    best_C = cv_model.C_[0]
+    best_C = float(Cs[np.argmax(mean_scores)])
     print(f"  Best C (CV): {best_C:.4e} (lambda={1/best_C:.4e})")
+
+    # Evaluate on TEST only once, at the CV-selected C.
+    X_tr_std, X_te_std, _, _ = standardize(X_train, X_test)
+    final_model = LogisticRegression(
+        penalty="l1",
+        C=best_C,
+        solver="saga",
+        max_iter=10000,
+        tol=1e-4,
+        random_state=RANDOM_SEED
+    )
+    final_model.fit(X_tr_std, y_tr_arr)
+    test_acc = final_model.score(X_te_std, y_te_arr)
+    print(f"  One-time L1 test accuracy at CV-selected C: {test_acc:.4f}")
 
 
 if __name__ == "__main__":
