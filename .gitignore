@@ -13,6 +13,7 @@ wheels/
 assignment_description.md
 *.pdf
 *.png
+*.html
 
 # AI
 CLAUDE.md

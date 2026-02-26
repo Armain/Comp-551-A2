@@ -62,6 +62,20 @@ conda create -n comp551a2 python=3.12
 conda activate comp551a2
 pip install -r requirements.txt
 ```
+## Configuration
+
+Runtime settings are stored in `config.ini` at the project root and validated via pydantic in `src/utils.py`:
+
+```ini
+[settings]
+random_seed = 2026
+show_inline_plots = true
+```
+
+| Setting | Type | Description |
+|---------|------|-------------|
+| `random_seed` | int | Seed for all random number generators (reproducibility) |
+| `show_inline_plots` | bool | Whether to display plots interactively (set to `false` for headless runs) |
 
 ## Running
 
@@ -99,21 +113,6 @@ All figures are saved to `figures/` (created automatically):
 | `task4/coef_path.png` | Top-10 L1 coefficient values vs C |
 | `task4/sparsity.png` | Number of non-zero coefficients vs C |
 | `task4/cv_performance.png` | Mean CV accuracy vs C |
-
-## Configuration
-
-Runtime settings are stored in `config.ini` at the project root and validated via pydantic in `src/utils.py`:
-
-```ini
-[settings]
-random_seed = 2026
-show_inline_plots = true
-```
-
-| Setting | Type | Description |
-|---------|------|-------------|
-| `random_seed` | int | Seed for all random number generators (reproducibility) |
-| `show_inline_plots` | bool | Whether to display plots interactively (set to `false` for headless runs) |
 
 ## Implementation Notes
 

@@ -1,8 +1,8 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import plotly.graph_objects as go
 import seaborn as sns
-from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 — registers 3D projection
 from pathlib import Path
 from utils import config
 
@@ -10,7 +10,14 @@ FIG = Path(__file__).parent.parent / "figures"
 SHOW_INLINE_PLOTS = config.show_inline_plots
 sns.set_theme(style='whitegrid')
 
-def save_fig(fig, path):
+
+def save_fig(fig: plt.Figure, path: Path | str) -> None:
+    """Save figure to disk and optionally display inline.
+
+    Args:
+        fig: Matplotlib figure to save.
+        path: Destination file path.
+    """
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(path, dpi=150, bbox_inches="tight")
     if SHOW_INLINE_PLOTS:
@@ -18,11 +25,16 @@ def save_fig(fig, path):
     plt.close(fig)
 
 
-def plot_training_curves(training_curves, save_path=FIG / "task1" / "training_curves.png"):
-    """Combined 2x3 figure: rows = regularization setting, cols = batch size.
+def plot_training_curves(
+    training_curves: pd.DataFrame,
+    save_path: Path = FIG / "task1" / "training_curves.png",
+) -> None:
+    """Plot training loss curves in a rows-x-cols grid (lambda x batch size).
 
-    training_curves: DataFrame with columns [lam, batch_size, lr, train_loss]
-    where train_loss holds a list of per-epoch loss values.
+    Args:
+        training_curves: DataFrame with columns [lam, batch_size, lr, train_loss]
+            where train_loss holds a list of per-epoch loss values.
+        save_path: Destination path for the saved figure.
     """
     batch_sizes = sorted(training_curves["batch_size"].unique())
     lam_vals = sorted(training_curves["lam"].unique())
@@ -49,46 +61,77 @@ def plot_training_curves(training_curves, save_path=FIG / "task1" / "training_cu
     save_fig(fig, save_path)
 
 
-def plot_cv_heatmap(cv_results, save_path=FIG / "task2" / "cv_hyperparameter_search.png"):
-    """3D scatter of mean val CE over the lr x batch_size x init_scale grid."""
-    results = cv_results if isinstance(cv_results, pd.DataFrame) else pd.DataFrame(cv_results)
+def plot_hp_grid_par_coords(
+    cv_results: pd.DataFrame,
+    save_path: Path = FIG / "task2" / "cv_hyperparameter_search.html",
+) -> None:
+    """Interactive parallel coordinates plot of CV hyperparameter search (saved as HTML).
 
-    init_scale_vals = sorted(results["init_scale"].unique())
+    Args:
+        cv_results: DataFrame with columns [lr, batch_size, init_scale, mean_val_ce, ...].
+        save_path: Destination path for the saved HTML file.
+    """
+    lr_vals_sorted = sorted(cv_results["lr"].unique())
+    bs_vals_sorted = sorted(cv_results["batch_size"].unique())
+    init_scale_vals = sorted(cv_results["init_scale"].unique())
     scale_to_idx = {s: i for i, s in enumerate(init_scale_vals)}
 
-    x = np.log10(results["lr"].values.astype(float))
-    y = np.log10(results["batch_size"].values.astype(float))
-    z = results["init_scale"].map(scale_to_idx).values.astype(float)
-    c = np.log10(results["mean_val_ce"].values.astype(float))
+    lr_log = np.log10(cv_results["lr"].values.astype(float))
+    bs_log = np.log10(cv_results["batch_size"].values.astype(float))
+    is_ord = cv_results["init_scale"].map(scale_to_idx).values.astype(float)
+    ce_log = np.log10(cv_results["mean_val_ce"].values.astype(float))
 
-    fig = plt.figure(figsize=(10, 7))
-    ax = fig.add_subplot(111, projection="3d")
-    sc = ax.scatter(x, y, z, c=c, cmap="viridis", s=60, alpha=0.9, edgecolors="none")
+    fig = go.Figure(data=go.Parcoords(
+        line=dict(
+            color=ce_log,
+            colorscale="aggrnyl",
+            showscale=True,
+            colorbar=dict(title="log Val CE"),
+        ),
+        dimensions=[
+            dict(
+                label="Learning Rate",
+                values=lr_log,
+                tickvals=[np.log10(float(v)) for v in lr_vals_sorted],
+                ticktext=[str(v) for v in lr_vals_sorted],
+            ),
+            dict(
+                label="Batch Size",
+                values=bs_log,
+                tickvals=[np.log10(float(v)) for v in bs_vals_sorted],
+                ticktext=[str(int(v)) for v in bs_vals_sorted],
+            ),
+            dict(
+                label="Init Scale",
+                values=is_ord,
+                tickvals=list(range(len(init_scale_vals))),
+                ticktext=[str(s) for s in init_scale_vals],
+            ),
+            dict(
+                label="log Val CE",
+                values=ce_log,
+            ),
+        ],
+    ))
+    fig.update_layout(
+        title="Hyperparameter Search: Parallel Coordinates",
+        height=500,
+    )
+    Path(save_path).parent.mkdir(parents=True, exist_ok=True)
+    fig.write_html(str(save_path))
 
-    lr_vals = sorted(results["lr"].unique())
-    bs_vals = sorted(results["batch_size"].unique())
 
-    ax.set_xticks(np.log10(lr_vals))
-    ax.set_xticklabels([str(v) for v in lr_vals], fontsize=7)
-    ax.set_yticks(np.log10(bs_vals))
-    ax.set_yticklabels([str(int(v)) for v in bs_vals], fontsize=7)
-    ax.set_zticks(list(range(len(init_scale_vals))))
-    ax.set_zticklabels([str(s) for s in init_scale_vals], fontsize=7)
+def plot_lambda_sweep(
+    sweep_results: pd.DataFrame,
+    save_path: Path = FIG / "task3" / "lambda_sweep_ce.png",
+) -> None:
+    """Plot train vs val CE as a function of lambda with shaded std regions.
 
-    ax.set_xlabel("Learning Rate", labelpad=10)
-    ax.set_ylabel("Batch Size", labelpad=10)
-    ax.set_zlabel("Init Scale", labelpad=10)
-    ax.set_title("Mean Validation CE (K-Fold CV)")
-
-    cbar = fig.colorbar(sc, ax=ax, shrink=0.5, pad=0.1)
-    cbar.set_label(r"$\log_{10}$ (Mean Val CE)")
-
-    fig.tight_layout()
-    save_fig(fig, save_path)
-
-
-def plot_lambda_sweep(sweep_results, save_path=FIG / "task3" / "lambda_sweep_ce.png"):
-    """Train vs val CE as function of lambda with shaded std regions."""
+    Args:
+        sweep_results: DataFrame with columns [lam, mean_train_ce, std_train_ce,
+            mean_val_ce, std_val_ce, ...].
+        save_path: Destination path for the saved figure.
+    """
     fig, ax = plt.subplots(figsize=(8, 5))
     x = sweep_results["lam"].values.astype(float)
     for metric, marker, label in [("train_ce", "o", "Train CE"), ("val_ce", "s", "Val CE")]:
@@ -106,8 +149,17 @@ def plot_lambda_sweep(sweep_results, save_path=FIG / "task3" / "lambda_sweep_ce.
     save_fig(fig, save_path)
 
 
-def plot_lambda_sweep_acc(sweep_results, save_path=FIG / "task3" / "lambda_sweep_acc.png"):
-    """Train vs val accuracy as function of lambda with shaded std regions."""
+def plot_lambda_sweep_acc(
+    sweep_results: pd.DataFrame,
+    save_path: Path = FIG / "task3" / "lambda_sweep_acc.png",
+) -> None:
+    """Plot train vs val accuracy as a function of lambda with shaded std regions.
+
+    Args:
+        sweep_results: DataFrame with columns [lam, mean_train_acc, std_train_acc,
+            mean_val_acc, std_val_acc, ...].
+        save_path: Destination path for the saved figure.
+    """
     fig, ax = plt.subplots(figsize=(8, 5))
     x = sweep_results["lam"].values.astype(float)
     for metric, marker, label in [("train_acc", "o", "Train Acc"), ("val_acc", "s", "Val Acc")]:
@@ -125,8 +177,22 @@ def plot_lambda_sweep_acc(sweep_results, save_path=FIG / "task3" / "lambda_sweep
     save_fig(fig, save_path)
 
 
-def plot_l1_coef_path(Cs, coef_matrix, feature_names, save_path=FIG / "task4" / "coef_path.png", top_k=10):
-    """Coefficient values vs C for top-k features by max absolute value."""
+def plot_l1_coef_path(
+    Cs: np.ndarray,
+    coef_matrix: np.ndarray,
+    feature_names: list[str],
+    save_path: Path = FIG / "task4" / "coef_path.png",
+    top_k: int = 10,
+) -> None:
+    """Plot coefficient values vs C for the top-k features by max absolute value.
+
+    Args:
+        Cs: Array of C values (inverse regularization strength).
+        coef_matrix: Coefficient matrix of shape (len(Cs), n_features).
+        feature_names: Feature name strings in dataset column order.
+        save_path: Destination path for the saved figure.
+        top_k: Number of top features to display.
+    """
     max_abs = np.max(np.abs(coef_matrix), axis=0)
     top_idx = np.argsort(max_abs)[-top_k:][::-1]
 
@@ -143,8 +209,18 @@ def plot_l1_coef_path(Cs, coef_matrix, feature_names, save_path=FIG / "task4" / 
     save_fig(fig, save_path)
 
 
-def plot_l1_sparsity(Cs, nnz_counts, save_path=FIG / "task4" / "sparsity.png"):
-    """Number of non-zero coefficients vs C."""
+def plot_l1_sparsity(
+    Cs: np.ndarray,
+    nnz_counts: np.ndarray,
+    save_path: Path = FIG / "task4" / "sparsity.png",
+) -> None:
+    """Plot number of non-zero coefficients vs C.
+
+    Args:
+        Cs: Array of C values (inverse regularization strength).
+        nnz_counts: Number of non-zero coefficients at each C.
+        save_path: Destination path for the saved figure.
+    """
     fig, ax = plt.subplots(figsize=(8, 5))
     ax.plot(Cs, nnz_counts, marker="o", markersize=4)
     ax.set_xscale("log")
@@ -156,8 +232,20 @@ def plot_l1_sparsity(Cs, nnz_counts, save_path=FIG / "task4" / "sparsity.png"):
     save_fig(fig, save_path)
 
 
-def plot_l1_cv_performance(Cs, mean_scores, std_scores=None, save_path=FIG / "task4" / "cv_performance.png"):
-    """Mean CV accuracy vs C with optional shaded std region."""
+def plot_l1_cv_performance(
+    Cs: np.ndarray,
+    mean_scores: np.ndarray,
+    std_scores: np.ndarray | None = None,
+    save_path: Path = FIG / "task4" / "cv_performance.png",
+) -> None:
+    """Plot mean CV accuracy vs C with optional shaded std region.
+
+    Args:
+        Cs: Array of C values (inverse regularization strength).
+        mean_scores: Mean CV accuracy at each C.
+        std_scores: Optional std of CV accuracy for shading.
+        save_path: Destination path for the saved figure.
+    """
     fig, ax = plt.subplots(figsize=(8, 5))
     ax.plot(Cs, mean_scores, marker="o", markersize=4, label="Mean CV Acc")
     if std_scores is not None:

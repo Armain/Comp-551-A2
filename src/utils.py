@@ -10,8 +10,15 @@ class Settings(BaseModel):
     show_inline_plots: bool
 
 
-def load_config(path=CONFIG_PATH):
-    """Load and validate config.ini using pydantic."""
+def load_config(path: Path = CONFIG_PATH) -> Settings:
+    """Load and validate config.ini via pydantic.
+
+    Args:
+        path: Path to the config.ini file.
+
+    Returns:
+        Validated Settings instance.
+    """
     parser = configparser.ConfigParser()
     parser.read(path)
     return Settings(

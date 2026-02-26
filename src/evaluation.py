@@ -4,29 +4,71 @@ from preprocessing import standardize, get_kfold_indices, RANDOM_SEED
 from models import LogisticRegressionSGD
 
 
-def cross_entropy(y_true, y_prob):
-    """Mean binary cross-entropy with clipping for numerical stability."""
+def cross_entropy(y_true: np.ndarray, y_prob: np.ndarray) -> float:
+    """Mean binary cross-entropy with clipping for numerical stability.
+
+    Args:
+        y_true: Ground-truth binary labels.
+        y_prob: Predicted probabilities in (0, 1).
+
+    Returns:
+        Scalar mean cross-entropy loss.
+    """
     p = np.clip(y_prob, 1e-12, 1 - 1e-12)
     return -np.mean(y_true * np.log(p) + (1 - y_true) * np.log(1 - p))
 
 
-def accuracy(y_true, y_pred):
+def accuracy(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+    """Fraction of correctly classified samples.
+
+    Args:
+        y_true: Ground-truth binary labels.
+        y_pred: Predicted binary labels.
+
+    Returns:
+        Scalar accuracy in [0, 1].
+    """
     return np.mean(y_true == y_pred)
 
 
-def kfold_cv(X_train, y_train, k, lr, batch_size, lam, init_scale=0.0,
-             max_epochs=200, patience=10, seed=RANDOM_SEED):
-    """Run K-fold CV with per-fold standardization and early stopping.
+def kfold_cv(
+    X_train: pd.DataFrame,
+    y_train: pd.Series,
+    k: int,
+    lr: float,
+    batch_size: int,
+    lam: float = 0,
+    init_scale: float = 0.0,
+    max_epochs: int = 200,
+    patience: int = 10,
+    seed: int = RANDOM_SEED,
+) -> pd.Series:
+    """Run K-fold CV with per-fold standardization and early stopping on val loss.
 
-    Returns pd.Series with mean_/std_ prefixed metrics.
+    Args:
+        X_train: Feature matrix.
+        y_train: Binary labels.
+        k: Number of folds.
+        lr: Learning rate.
+        batch_size: Mini-batch size.
+        lam: L2 regularization strength.
+        init_scale: Weight initialization std (0.0 = zero init).
+        max_epochs: Maximum training epochs per fold.
+        patience: Early stopping patience in epochs.
+        seed: Random seed for fold splits and model init.
+
+    Returns:
+        pd.Series with mean_ and std_ prefixed metrics across folds.
     """
     folds = get_kfold_indices(len(y_train), k=k, seed=seed)
-    X_arr = X_train.values if hasattr(X_train, 'values') else X_train
-    y_arr = y_train.values if hasattr(y_train, 'values') else y_train
+    X_arr = X_train.values
+    y_arr = y_train.values
 
-    fold_metrics = pd.DataFrame(index=range(k),
-                                columns=["train_ce", "val_ce", "train_acc", "val_acc"],
-                                dtype=float)
+    fold_metrics = pd.DataFrame(
+        index=range(k),
+        columns=["train_ce", "val_ce", "train_acc", "val_acc"],
+        dtype=float,
+    )
 
     for fold_i, (train_idx, val_idx) in enumerate(folds):
         X_tr, X_va = X_arr[train_idx], X_arr[val_idx]
@@ -48,6 +90,5 @@ def kfold_cv(X_train, y_train, k, lr, batch_size, lam, init_scale=0.0,
             accuracy(y_va, model.predict(X_va_std)),
         ]
 
-    summary = pd.concat([fold_metrics.mean().add_prefix("mean_"),
-                          fold_metrics.std().add_prefix("std_")])
-    return summary
+    return pd.concat([fold_metrics.mean().add_prefix("mean_"),
+                      fold_metrics.std().add_prefix("std_")])
