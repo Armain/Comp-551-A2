@@ -104,7 +104,7 @@ def plot_hp_grid_par_coords(
             dict(label="Init Scale", values=is_ord,
                  tickvals=list(range(len(init_scale_vals))),
                  ticktext=[str(s) for s in init_scale_vals]),
-            dict(label="Lambda", values=lam_log, 
+            dict(label="Lambda", values=lam_log,
                  tickvals=[np.log10(v) for v in lam_ref_ticks],
                  ticktext=[str(v) for v in lam_ref_ticks]),
         ]
@@ -149,23 +149,36 @@ def plot_hp_grid_par_coords(
 
 def plot_lambda_sweep(
     sweep_results: pd.DataFrame,
+    sweep_results2: pd.DataFrame | None = None,
+    label1: str | None = None,
+    label2: str | None = None,
     save_path: Path = FIG / "task3" / "lambda_sweep_ce.png",
 ) -> None:
-    """Plot train vs val CE as a function of lambda with shaded std regions.
+    """Plot train vs val CE as a function of lambda with 80% uncertainty bands.
 
     Args:
-        sweep_results: DataFrame with columns [lam, mean_train_ce, std_train_ce,
-            mean_val_ce, std_val_ce, ...].
+        sweep_results: Primary sweep DataFrame with p10_/p90_ prefixed columns.
+        sweep_results2: Optional second sweep DataFrame (e.g. larger training set).
+        label1: Legend suffix for sweep_results.
+        label2: Legend suffix for sweep_results2.
         save_path: Destination path for the saved figure.
     """
-    fig, ax = plt.subplots(figsize=(8, 5))
-    x = sweep_results["lam"].values.astype(float)
-    for metric, marker, label in [("train_ce", "o", "Training Cross-Entropy"), ("val_ce", "s", "Validation Cross-Entropy")]:
-        mean = sweep_results[f"mean_{metric}"].values
-        p10  = sweep_results[f"p10_{metric}"].values
-        p90  = sweep_results[f"p90_{metric}"].values
-        line, = ax.plot(x, mean, marker=marker, label=label)
-        ax.fill_between(x, p10, p90, alpha=0.2, color=line.get_color(), label="80% Uncertainty Bound")
+    suffix1 = f' {label1}' if label1 else ''
+    suffix2 = f' {label2}' if label1 else ''
+    
+    datasets = [(sweep_results, suffix1, "-")]
+    if sweep_results2 is not None:
+        datasets.append((sweep_results2, suffix2, "--"))
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    for results, suffix, ls in datasets:
+        x = results["lam"].values.astype(float)
+        for metric, marker, base_label in [("train_ce", "o", "Training Cross-Entropy"), ("val_ce", "s", "Validation Cross-Entropy")]:
+            mean = results[f"mean_{metric}"].values
+            p10  = results[f"p10_{metric}"].values
+            p90  = results[f"p90_{metric}"].values
+            line, = ax.plot(x, mean, marker=marker, linestyle=ls, label=f"{base_label}{suffix}")
+            ax.fill_between(x, p10, p90, alpha=0.15, color=line.get_color())
     ax.set_xscale("symlog", linthresh=1e-7)
     ax.set_xlabel(r"$\lambda$")
     ax.set_ylabel("Cross-Entropy")
@@ -178,23 +191,39 @@ def plot_lambda_sweep(
 
 def plot_lambda_sweep_acc(
     sweep_results: pd.DataFrame,
+    sweep_results2: pd.DataFrame | None = None,
+    label1: str | None = None,
+    label2: str | None = None,
     save_path: Path = FIG / "task3" / "lambda_sweep_acc.png",
 ) -> None:
-    """Plot train vs val accuracy as a function of lambda with shaded std regions.
+    """Plot train vs val accuracy as a function of lambda with 80% uncertainty bands.
 
     Args:
-        sweep_results: DataFrame with columns [lam, mean_train_acc, std_train_acc,
-            mean_val_acc, std_val_acc, ...].
+        sweep_results: Primary sweep DataFrame with p10_/p90_ prefixed columns.
+        sweep_results2: Optional second sweep DataFrame (e.g. larger training set).
+        label1: Legend suffix for sweep_results.
+        label2: Legend suffix for sweep_results2.
         save_path: Destination path for the saved figure.
     """
-    fig, ax = plt.subplots(figsize=(8, 5))
-    x = sweep_results["lam"].values.astype(float)
-    for metric, marker, label in [("train_acc", "o", "Training Accuracy"), ("val_acc", "s", "Validation Accuracy")]:
-        mean = sweep_results[f"mean_{metric}"].values
-        p10  = sweep_results[f"p10_{metric}"].values
-        p90  = sweep_results[f"p90_{metric}"].values
-        line, = ax.plot(x, mean, marker=marker, label=label)
-        ax.fill_between(x, p10, p90, alpha=0.2, color=line.get_color(), label="80% Uncertainty Bound")
+    suffix1 = f' ({label1})' if label1 else ''
+    suffix2 = f' ({label2})' if label1 else ''
+    
+    datasets = [(sweep_results, suffix1, "-")]
+    if sweep_results2 is not None:
+        datasets.append((sweep_results2, suffix2, "--"))
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    bound_labeled = False
+    for results, suffix, ls in datasets:
+        x = results["lam"].values.astype(float)
+        for metric, marker, base_label in [("train_acc", "o", "Training Accuracy"), ("val_acc", "s", "Validation Accuracy")]:
+            mean = results[f"mean_{metric}"].values
+            p10  = results[f"p10_{metric}"].values
+            p90  = results[f"p90_{metric}"].values
+            line, = ax.plot(x, mean, marker=marker, linestyle=ls, label=f"{base_label}{suffix}")
+            shade_label = "_nolegend_" if bound_labeled else "80% Uncertainty Bound"
+            ax.fill_between(x, p10, p90, alpha=0.15, color=line.get_color(), label=shade_label)
+            bound_labeled = True
     ax.set_xscale("symlog", linthresh=1e-7)
     ax.set_xlabel(r"$\lambda$")
     ax.set_ylabel("Accuracy")

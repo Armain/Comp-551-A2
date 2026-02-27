@@ -66,7 +66,7 @@ def train_and_plot_curves(X_train: pd.DataFrame, y_train: pd.Series, use_adam: b
     return training_curves
 
 
-def tune_hyperparameters(X_train: pd.DataFrame, y_train: pd.Series) -> tuple[pd.DataFrame, dict]:
+def tune_hyperparameters(X_train: pd.DataFrame, y_train: pd.Series) -> tuple[pd.DataFrame, pd.Series]:
     """Run 5-fold CV over a randomized search (50 SGD + 50 Adam configs).
 
     Args:
@@ -121,18 +121,8 @@ def tune_hyperparameters(X_train: pd.DataFrame, y_train: pd.Series) -> tuple[pd.
         print(hp_results[["lr", "batch_size", "init_scale", "lam", "use_adam", "mean_val_ce", "std_val_ce", "mean_val_acc", "std_val_acc"]].to_string(index=False))
 
     best = hp_results.loc[hp_results["mean_val_ce"].idxmin()]
-    print(f"\nBest config: lr={best['lr']:.4e}, B={int(best['batch_size'])}, "
-          f"init_scale={best['init_scale']}, lam={best['lam']:.4e}, use_adam={best['use_adam']}")
-    print(f"  val_ce={best['mean_val_ce']:.4f}, val_acc={best['mean_val_acc']:.4f}")
-
-    best_params: dict = {
-        "lr": best["lr"], "batch_size": int(best["batch_size"]),
-        "init_scale": best["init_scale"], "lam": best["lam"],
-        "use_adam": bool(best["use_adam"]),
-    }
-    if best_params["use_adam"]:
-        best_params["beta1"] = best["beta1"]
-        best_params["beta2"] = best["beta2"]
+    best_params = best[[c for c in best.index if not c.startswith(("mean_", "std_", "p10_", "p90_"))]]
+    print(f"\nBest config:\n{best_params.to_string()}")
     return hp_results, best_params
 
 
@@ -140,7 +130,7 @@ def sweep_regularization(
     X_train: pd.DataFrame, y_train: pd.Series,
     X_test: pd.DataFrame, y_test: pd.Series,
 ) -> pd.DataFrame:
-    """Sweep L2 lambda via 20-fold CV and evaluate the best lambda on the test set.
+    """Sweep L2 lambda via K-fold CV and evaluate the best lambda on the test set.
 
     Args:
         X_train: Training feature matrix.
@@ -265,7 +255,7 @@ def fit_and_plot_l1_regularization_path(
 
 if __name__ == "__main__":
     X, y = load_data(cwd / "data")
-    X_train, X_test, y_train, y_test = train_test_split(X, y)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, train_frac=0.05)
     print(f"Train: {X_train.shape[0]}, Test: {X_test.shape[0]}")
     print(f"Train spam ratio: {y_train.mean():.3f}")
 
@@ -282,10 +272,12 @@ if __name__ == "__main__":
     hp_results, best_params = tune_hyperparameters(X_train, y_train)
     plot_hp_grid_par_coords(hp_results)
 
-    # %% Task 3: Lambda sweep with K-fold CV
+    # %% Task 3: Lambda sweep with K-fold CV (Vanilla SGD)
+    X_train2, X_test2, y_train2, y_test2 = train_test_split(X, y, train_frac=0.2)
     sweep_results = sweep_regularization(X_train, y_train, X_test, y_test)
-    plot_lambda_sweep(sweep_results)
-    plot_lambda_sweep_acc(sweep_results)
+    sweep_results2 = sweep_regularization(X_train2, y_train2, X_test2, y_test2)
+    plot_lambda_sweep(sweep_results, sweep_results2, label1=f"n={X_train.shape[0]}", label2=f"n={X_train2.shape[0]}")
+    plot_lambda_sweep_acc(sweep_results, sweep_results2, label1=f"n={X_train.shape[0]}", label2=f"n={X_train2.shape[0]}")
 
     # %% Task 4: L1 regularization path (sklearn)
     l1_path_results = fit_and_plot_l1_regularization_path(X_train, y_train, X_test, y_test)
