@@ -81,6 +81,9 @@ def plot_hp_grid_par_coords(
     adam_res = hp_results[hp_results["use_adam"]]
 
     lr_ref_ticks = [1e-4, 1e-3, 1e-2, 1e-1, 1.0]
+    lam_ref_ticks = [1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1]
+    beta1_ref_ticks = [0.85, 0.86, 0.88, 0.9, 0.92, 0.94, 0.96, 0.98, 0.999]
+    beta2_ref_ticks = [0.99, 0.992, 0.994, 0.996, 0.998, 0.9999]
     bs_vals_sorted = sorted(hp_results["batch_size"].unique())
     init_scale_vals = sorted(hp_results["init_scale"].unique())
     scale_to_idx = {s: i for i, s in enumerate(init_scale_vals)}
@@ -101,25 +104,30 @@ def plot_hp_grid_par_coords(
             dict(label="Init Scale", values=is_ord,
                  tickvals=list(range(len(init_scale_vals))),
                  ticktext=[str(s) for s in init_scale_vals]),
-            dict(label="log Lambda", values=lam_log),
+            dict(label="Lambda", values=lam_log, 
+                 tickvals=[np.log10(v) for v in lam_ref_ticks],
+                 ticktext=[str(v) for v in lam_ref_ticks]),
         ]
         if "beta1" in cv_results.columns and cv_results["beta1"].notna().any():
-            dims.append(dict(label="Beta1", values=cv_results["beta1"].values.astype(float)))
+            dims.append(dict(
+                label="Beta1", values=cv_results["beta1"].values.astype(float),
+                tickvals=beta1_ref_ticks
+                ))
         if "beta2" in cv_results.columns and cv_results["beta2"].notna().any():
-            dims.append(dict(label="Beta2", values=cv_results["beta2"].values.astype(float)))
+            dims.append(dict(
+                label="Beta2", values=cv_results["beta2"].values.astype(float),
+                tickvals=beta2_ref_ticks
+                ))
         dims.append(dict(label="log Val CE", values=ce_log))
         return dims, ce_log
 
     sgd_dims,  sgd_ce  = _build_dims(sgd_res)
     adam_dims, adam_ce = _build_dims(adam_res)
 
-    ce_all = np.log10(hp_results["mean_val_ce"].values.astype(float))
-    cmin, cmax = float(ce_all.min()), float(ce_all.max())
-
     def _parcoords_fig(dims: list, ce: np.ndarray, title: str) -> go.Figure:
         f = go.Figure(data=go.Parcoords(
             line=dict(color=ce, colorscale="aggrnyl", showscale=True,
-                      cmin=cmin, cmax=cmax,
+                      cmin=-0.65, cmax=0.55,
                       colorbar=dict(title="log Val CE")),
             dimensions=dims,
         ))
@@ -160,6 +168,7 @@ def plot_lambda_sweep(
     ax.set_xscale("symlog", linthresh=1e-7)
     ax.set_xlabel(r"$\lambda$")
     ax.set_ylabel("Cross-Entropy")
+    ax.set_ylim(bottom=0)
     ax.set_title(r"Bias-Variance Trade-off: Cross Entropy vs $\lambda$")
     ax.legend()
     ax.grid(True, alpha=0.3)
@@ -188,6 +197,7 @@ def plot_lambda_sweep_acc(
     ax.set_xscale("symlog", linthresh=1e-7)
     ax.set_xlabel(r"$\lambda$")
     ax.set_ylabel("Accuracy")
+    ax.set_ylim(top=1)
     ax.set_title(r"Bias-Variance Trade-off: Accuracy vs $\lambda$")
     ax.legend()
     ax.grid(True, alpha=0.3)

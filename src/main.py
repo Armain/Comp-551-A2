@@ -80,27 +80,27 @@ def tune_hyperparameters(X_train: pd.DataFrame, y_train: pd.Series) -> tuple[pd.
 
     k = 5
     n_each = 50
-    batch_options = [1, 4, 16, 32, 64]
+    batch_options = [1, 2, 4, 8, 16, 32, 64, 128]
     scale_options = [0.0, 0.001, 0.01, 0.1, 1.0]
     rng_hp = np.random.default_rng(RANDOM_SEED)
 
     sgd_results = pd.DataFrame({
         "lr":          10 ** rng_hp.uniform(np.log10(1e-4), 0.0, n_each),
+        "lam":         10 ** rng_hp.uniform(np.log10(1e-6), 0.0, n_each),
         "batch_size":  rng_hp.choice(batch_options, n_each).astype(int),
         "init_scale":  rng_hp.choice(scale_options, n_each),
-        "lam":         10 ** rng_hp.uniform(np.log10(1e-6), 0.0, n_each),
         "use_adam":    False,
         "mean_val_ce": np.nan, "std_val_ce": np.nan, "mean_val_acc": np.nan,
     })
 
     adam_results = pd.DataFrame({
         "lr":          10 ** rng_hp.uniform(np.log10(1e-4), 0.0, n_each),
+        "lam":         10 ** rng_hp.uniform(np.log10(1e-6), 0.0, n_each),
         "batch_size":  rng_hp.choice(batch_options, n_each).astype(int),
         "init_scale":  rng_hp.choice(scale_options, n_each),
-        "lam":         10 ** rng_hp.uniform(np.log10(1e-6), 0.0, n_each),
-        "use_adam":    True,
         "beta1":       rng_hp.uniform(0.85, 0.999, n_each),
         "beta2":       rng_hp.uniform(0.99, 0.9999, n_each),
+        "use_adam":    True,
         "mean_val_ce": np.nan, "std_val_ce": np.nan, "mean_val_acc": np.nan,
     })
 
@@ -159,7 +159,7 @@ def sweep_regularization(
 
     sweep_results = pd.DataFrame({"lam": lambdas})
     for i, lam in tqdm(enumerate(lambdas), total=len(lambdas)):
-        cv_summary = kfold_cv(X_train, y_train, k=k, lr=lr, batch_size=bs, lam=lam)
+        cv_summary = kfold_cv(X_train, y_train, k=k, lr=lr, batch_size=bs, lam=lam, epochs=200)
         sweep_results.loc[i, cv_summary.index] = cv_summary
 
     if config.verbose:

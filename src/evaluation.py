@@ -39,6 +39,7 @@ def kfold_cv(
     batch_size: int,
     lam: float = 0,
     init_scale: float = 0.0,
+    epochs: int | None = None,
     max_epochs: int = 200,
     patience: int = 10,
     seed: int = RANDOM_SEED,
@@ -46,7 +47,7 @@ def kfold_cv(
     beta1: float = 0.9,
     beta2: float = 0.999,
 ) -> pd.Series:
-    """Run K-fold CV with per-fold standardization and early stopping on val loss.
+    """Run K-fold CV with per-fold standardization and early stopping (if epoch not specified) on val loss.
 
     Args:
         X_train: Feature matrix.
@@ -56,7 +57,8 @@ def kfold_cv(
         batch_size: Mini-batch size.
         lam: L2 regularization strength.
         init_scale: Weight initialization std (0.0 = zero init).
-        max_epochs: Maximum training epochs per fold.
+        epochs: Fixed epoch count; disables early stopping when set.
+        max_epochs: Max epochs when using early stopping.
         patience: Early stopping patience in epochs.
         seed: Random seed for fold splits and model init.
         use_adam: Use Adam optimizer instead of vanilla SGD.
@@ -84,7 +86,7 @@ def kfold_cv(
         rng = np.random.default_rng(seed)
         model = LogisticRegressionSGD(
             n_features=X_tr.shape[1], lr=lr, lam=lam,
-            batch_size=batch_size, init_scale=init_scale, rng=rng,
+            batch_size=batch_size, init_scale=init_scale, epochs=epochs, rng=rng,
             use_adam=use_adam, beta1=beta1, beta2=beta2,
         )
         model.fit(X_tr_std, y_tr, max_epochs=max_epochs, rng=rng,

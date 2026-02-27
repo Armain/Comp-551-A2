@@ -15,6 +15,7 @@ class LogisticRegressionSGD:
         lam: float = 1e-3,
         batch_size: int = 16,
         init_scale: float = 0.0,
+        epochs: int | None = None,
         rng: np.random.Generator | None = None,
         use_adam: bool = False,
         beta1: float = 0.9,
@@ -28,6 +29,7 @@ class LogisticRegressionSGD:
             lam: L2 regularization strength.
             batch_size: Mini-batch size.
             init_scale: Std of Gaussian weight init; 0.0 uses zero init.
+            epochs: Fixed epoch count; disables early stopping when set.
             rng: Optional random generator for weight initialisation.
             use_adam: Use Adam optimizer instead of vanilla SGD.
             beta1: Adam exponential decay rate for the first moment.
@@ -42,6 +44,7 @@ class LogisticRegressionSGD:
         self.lr = lr
         self.lam = lam
         self.batch_size = batch_size
+        self.epochs = epochs
         self.use_adam = use_adam
         self.beta1 = beta1
         self.beta2 = beta2
@@ -188,39 +191,42 @@ class LogisticRegressionSGD:
             val_loss and val_acc.
         """
         rng = rng if rng is not None else np.random.default_rng()
+        n_epochs = self.epochs if self.epochs is not None else max_epochs
+        use_early_stopping = X_val is not None and self.epochs is None
         history: dict[str, list] = {"train_loss": [], "train_acc": []}
-        use_early_stopping = X_val is not None
-        if use_early_stopping:
+        if X_val is not None:
             history["val_loss"] = []
             history["val_acc"] = []
+        if use_early_stopping:
             best_val_loss = np.inf
             best_w = self.w.copy()
             best_b = self.b
             epochs_no_improve = 0
 
-        for _ in range(max_epochs):
+        for _ in range(n_epochs):
             self.fit_epoch(X, y, rng)
 
             p_train = self.predict_proba(X)
             history["train_loss"].append(self.cross_entropy(y, p_train))
             history["train_acc"].append(np.mean((p_train >= 0.5) == y))
 
-            if use_early_stopping:
+            if X_val is not None:
                 val_loss = self.compute_loss(X_val, y_val)
                 p_val = self.predict_proba(X_val)
                 history["val_loss"].append(val_loss)
                 history["val_acc"].append(np.mean((p_val >= 0.5) == y_val))
 
-                if val_loss < best_val_loss:
-                    best_val_loss = val_loss
-                    best_w = self.w.copy()
-                    best_b = self.b
-                    epochs_no_improve = 0
-                else:
-                    epochs_no_improve += 1
-                    if epochs_no_improve >= patience:
-                        self.w = best_w
-                        self.b = best_b
-                        break
+                if use_early_stopping:
+                    if val_loss < best_val_loss:
+                        best_val_loss = val_loss
+                        best_w = self.w.copy()
+                        best_b = self.b
+                        epochs_no_improve = 0
+                    else:
+                        epochs_no_improve += 1
+                        if epochs_no_improve >= patience:
+                            self.w = best_w
+                            self.b = best_b
+                            break
 
         return history
