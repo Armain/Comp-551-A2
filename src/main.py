@@ -1,5 +1,4 @@
 import itertools
-import warnings
 
 import numpy as np
 import pandas as pd
@@ -14,16 +13,15 @@ from preprocessing import (
 )
 from models import LogisticRegressionSGD
 from evaluation import kfold_cv
+from tuner import RandomizedGridSearchCV, OptunaTunerCV
 from utils import config
 from plot import (
     plot_training_curves, plot_hp_grid_par_coords, plot_lambda_sweep,
     plot_lambda_sweep_acc, plot_l1_coef_path, plot_l1_sparsity, plot_l1_cv_performance
 )
 
-warnings.filterwarnings("ignore", category=FutureWarning)
-warnings.filterwarnings("ignore", category=UserWarning)
 
-def train_and_plot_curves(X_train: pd.DataFrame, y_train: pd.Series, use_adam: bool = False) -> pd.DataFrame:
+def training_curves(X_train: pd.DataFrame, y_train: pd.Series, use_adam: bool = False) -> pd.DataFrame:
     """Train models across a hyperparameter grid and save training curve plots.
 
     Args:
@@ -64,66 +62,6 @@ def train_and_plot_curves(X_train: pd.DataFrame, y_train: pd.Series, use_adam: b
     if config.verbose:
         print(training_curves[["lam", "batch_size", "lr", "final_loss", "final_acc"]].to_string(index=False))
     return training_curves
-
-
-def tune_hyperparameters(X_train: pd.DataFrame, y_train: pd.Series) -> tuple[pd.DataFrame, pd.Series]:
-    """Run 5-fold CV over a randomized search (50 SGD + 50 Adam configs).
-
-    Args:
-        X_train: Feature matrix of shape (n_samples, n_features).
-        y_train: Binary spam labels.
-
-    Returns:
-        Tuple of (hp_results DataFrame with CV metrics, best_params dict).
-    """
-    print("\nTask 2: Hyperparameter Tuning (Randomized Search CV)")
-
-    k = 5
-    n_each = 50
-    batch_options = [1, 2, 4, 8, 16, 32, 64, 128]
-    scale_options = [0.0, 0.001, 0.01, 0.1, 1.0]
-    rng_hp = np.random.default_rng(RANDOM_SEED)
-
-    sgd_results = pd.DataFrame({
-        "lr":          10 ** rng_hp.uniform(np.log10(1e-4), 0.0, n_each),
-        "lam":         10 ** rng_hp.uniform(np.log10(1e-6), 0.0, n_each),
-        "batch_size":  rng_hp.choice(batch_options, n_each).astype(int),
-        "init_scale":  rng_hp.choice(scale_options, n_each),
-        "use_adam":    False,
-        "mean_val_ce": np.nan, "std_val_ce": np.nan, "mean_val_acc": np.nan,
-    })
-
-    adam_results = pd.DataFrame({
-        "lr":          10 ** rng_hp.uniform(np.log10(1e-4), 0.0, n_each),
-        "lam":         10 ** rng_hp.uniform(np.log10(1e-6), 0.0, n_each),
-        "batch_size":  rng_hp.choice(batch_options, n_each).astype(int),
-        "init_scale":  rng_hp.choice(scale_options, n_each),
-        "beta1":       rng_hp.uniform(0.85, 0.999, n_each),
-        "beta2":       rng_hp.uniform(0.99, 0.9999, n_each),
-        "use_adam":    True,
-        "mean_val_ce": np.nan, "std_val_ce": np.nan, "mean_val_acc": np.nan,
-    })
-
-    for i, row in tqdm(sgd_results.iterrows(), total=n_each, desc="SGD Search"):
-        cv_summary = kfold_cv(X_train, y_train, k=k, lr=row["lr"], batch_size=int(row["batch_size"]),
-                              lam=row["lam"], init_scale=row["init_scale"])
-        sgd_results.loc[i, cv_summary.index] = cv_summary
-
-    for i, row in tqdm(adam_results.iterrows(), total=n_each, desc="Adam Search"):
-        cv_summary = kfold_cv(X_train, y_train, k=k, lr=row["lr"], batch_size=int(row["batch_size"]),
-                              lam=row["lam"], init_scale=row["init_scale"],
-                              use_adam=True, beta1=row["beta1"], beta2=row["beta2"])
-        adam_results.loc[i, cv_summary.index] = cv_summary
-
-    hp_results = pd.concat([sgd_results, adam_results], ignore_index=True)
-
-    if config.verbose:
-        print(hp_results[["lr", "batch_size", "init_scale", "lam", "use_adam", "mean_val_ce", "std_val_ce", "mean_val_acc", "std_val_acc"]].to_string(index=False))
-
-    best = hp_results.loc[hp_results["mean_val_ce"].idxmin()]
-    best_params = best[[c for c in best.index if not c.startswith(("mean_", "std_", "p10_", "p90_"))]]
-    print(f"\nBest config:\n{best_params.to_string()}")
-    return hp_results, best_params
 
 
 def sweep_regularization(
@@ -260,17 +198,42 @@ if __name__ == "__main__":
     print(f"Train spam ratio: {y_train.mean():.3f}")
 
     # %% Task 1: Training curves across hyperparameter grid
-    training_curves_sgd = train_and_plot_curves(X_train, y_train, use_adam=False)
+    training_curves_sgd = training_curves(X_train, y_train, use_adam=False)
     plot_training_curves(training_curves_sgd, title="Training Curves (SGD)",
-                         save_path=cwd / "figures" / "task1" / "training_curves_sgd.png")
+                         figname="training_curves_sgd.png")
 
-    training_curves_adam = train_and_plot_curves(X_train, y_train, use_adam=True)
+    training_curves_adam = training_curves(X_train, y_train, use_adam=True)
     plot_training_curves(training_curves_adam, title="Training Curves (Adam)",
-                         save_path=cwd / "figures" / "task1" / "training_curves_adam.png")
+                         figname="training_curves_adam.png")
 
-    # %% Task 2: K-fold CV hyperparameter tuning
-    hp_results, best_params = tune_hyperparameters(X_train, y_train)
-    plot_hp_grid_par_coords(hp_results)
+    # %% Task 2: K-fold CV hyperparameter tuning (Randomized Grid Search or Optuna)
+    if config.tuning_method == "optuna":
+        tuner = OptunaTunerCV(X_train, y_train)
+        figname = "cv_hp_search_optuna.html"
+    else:
+        tuner = RandomizedGridSearchCV(X_train, y_train)
+        figname = "cv_hp_search_random.html"
+    hp_results, best_params = tuner.run()
+    plot_hp_grid_par_coords(hp_results, figname=figname)
+
+    X_tr_std, X_te_std, _, _ = standardize(X_train, X_test)
+    best_model = LogisticRegressionSGD(
+        n_features=X_tr_std.shape[1],
+        lr=float(best_params["lr"]),
+        lam=float(best_params["lam"]),
+        batch_size=int(best_params["batch_size"]),
+        init_scale=float(best_params["init_scale"]),
+        use_adam=bool(best_params["use_adam"]),
+        **({} if not best_params["use_adam"] else {
+            "beta1": float(best_params["beta1"]),
+            "beta2": float(best_params["beta2"]),
+        }),
+    )
+    best_model.fit(X_tr_std, y_train.values, rng=np.random.default_rng(RANDOM_SEED))
+    test_ce = best_model.compute_loss(X_te_std, y_test.values)
+    test_acc = np.mean(best_model.predict(X_te_std) == y_test.values)
+    print(f"\nBest config:\n{best_params.to_string()}")
+    print(f"\nTest results:\nCross Entropy Loss={test_ce:.4f}\nAccuracy={test_acc:.4f}")
 
     # %% Task 3: Lambda sweep with K-fold CV (Vanilla SGD)
     X_train2, X_test2, y_train2, y_test2 = train_test_split(X, y, train_frac=0.2)

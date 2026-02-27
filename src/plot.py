@@ -28,7 +28,7 @@ def save_fig(fig: plt.Figure, path: Path | str) -> None:
 def plot_training_curves(
     training_curves: pd.DataFrame,
     title: str = "Training Curves",
-    save_path: Path = FIG / "task1" / "training_curves.png",
+    figname: str = "training_curves.png",
 ) -> None:
     """Plot training loss curves in a rows-x-cols grid (lambda x batch size).
 
@@ -36,7 +36,7 @@ def plot_training_curves(
         training_curves: DataFrame with columns [lam, batch_size, lr, train_loss]
             where train_loss holds a list of per-epoch loss values.
         title: Title for the overall figure.
-        save_path: Destination path for the saved figure.
+        figname: Output filename saved under figures/task1/.
     """
     batch_sizes = sorted(training_curves["batch_size"].unique())
     lam_vals = sorted(training_curves["lam"].unique())
@@ -59,12 +59,12 @@ def plot_training_curves(
             ax.legend(fontsize=8, loc='lower right')
     fig.suptitle(title)
     fig.tight_layout()
-    save_fig(fig, save_path)
+    save_fig(fig, FIG / "task1" / figname)
 
 
 def plot_hp_grid_par_coords(
     hp_results: pd.DataFrame,
-    save_path= FIG / "task2" / "cv_hp_search.html",
+    figname: str = "cv_hp_search.html",
 ) -> None:
     """Two-panel interactive parallel coordinates plot of randomized CV search (saved as HTML).
 
@@ -75,7 +75,7 @@ def plot_hp_grid_par_coords(
         hp_results: Combined DataFrame with a boolean 'use_adam' column and columns
             [lr, batch_size, init_scale, lam, mean_val_ce, ...], plus [beta1, beta2]
             for Adam rows.
-        save_path: Destination path for the saved HTML file.
+        figname: Output filename saved under figures/task2/.
     """
     sgd_res  = hp_results[~hp_results["use_adam"]]
     adam_res = hp_results[hp_results["use_adam"]]
@@ -126,7 +126,7 @@ def plot_hp_grid_par_coords(
 
     def _parcoords_fig(dims: list, ce: np.ndarray, title: str) -> go.Figure:
         f = go.Figure(data=go.Parcoords(
-            line=dict(color=ce, colorscale="aggrnyl", showscale=True,
+            line=dict(color=ce, colorscale="agsunset", showscale=True,
                       cmin=-0.65, cmax=0.55,
                       colorbar=dict(title="log Val CE")),
             dimensions=dims,
@@ -140,8 +140,9 @@ def plot_hp_grid_par_coords(
     html_sgd  = sgd_fig.to_html(full_html=False, include_plotlyjs="cdn")
     html_adam = adam_fig.to_html(full_html=False, include_plotlyjs=False)
 
-    Path(save_path).parent.mkdir(parents=True, exist_ok=True)
-    Path(save_path).write_text(
+    out = FIG / "task2" / figname
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(
         f'<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>'
         f'{html_sgd}{html_adam}</body></html>'
     )
@@ -152,7 +153,7 @@ def plot_lambda_sweep(
     sweep_results2: pd.DataFrame | None = None,
     label1: str | None = None,
     label2: str | None = None,
-    save_path: Path = FIG / "task3" / "lambda_sweep_ce.png",
+    figname: str = "lambda_sweep_ce.png",
 ) -> None:
     """Plot train vs val CE as a function of lambda with 80% uncertainty bands.
 
@@ -161,7 +162,7 @@ def plot_lambda_sweep(
         sweep_results2: Optional second sweep DataFrame (e.g. larger training set).
         label1: Legend suffix for sweep_results.
         label2: Legend suffix for sweep_results2.
-        save_path: Destination path for the saved figure.
+        figname: Output filename saved under figures/task3/.
     """
     suffix1 = f' {label1}' if label1 else ''
     suffix2 = f' {label2}' if label1 else ''
@@ -186,7 +187,7 @@ def plot_lambda_sweep(
     ax.legend()
     ax.grid(True, alpha=0.3)
     fig.tight_layout()
-    save_fig(fig, save_path)
+    save_fig(fig, FIG / "task3" / figname)
 
 
 def plot_lambda_sweep_acc(
@@ -194,7 +195,7 @@ def plot_lambda_sweep_acc(
     sweep_results2: pd.DataFrame | None = None,
     label1: str | None = None,
     label2: str | None = None,
-    save_path: Path = FIG / "task3" / "lambda_sweep_acc.png",
+    figname: str = "lambda_sweep_acc.png",
 ) -> None:
     """Plot train vs val accuracy as a function of lambda with 80% uncertainty bands.
 
@@ -203,7 +204,7 @@ def plot_lambda_sweep_acc(
         sweep_results2: Optional second sweep DataFrame (e.g. larger training set).
         label1: Legend suffix for sweep_results.
         label2: Legend suffix for sweep_results2.
-        save_path: Destination path for the saved figure.
+        figname: Output filename saved under figures/task3/.
     """
     suffix1 = f' ({label1})' if label1 else ''
     suffix2 = f' ({label2})' if label1 else ''
@@ -231,14 +232,14 @@ def plot_lambda_sweep_acc(
     ax.legend()
     ax.grid(True, alpha=0.3)
     fig.tight_layout()
-    save_fig(fig, save_path)
+    save_fig(fig, FIG / "task3" / figname)
 
 
 def plot_l1_coef_path(
     Cs: np.ndarray,
     coef_matrix: np.ndarray,
     feature_names: list[str],
-    save_path: Path = FIG / "task4" / "coef_path.png",
+    figname: str = "coef_path.png",
     top_k: int = 10,
 ) -> None:
     """Plot coefficient values vs C for the top-k features by max absolute value.
@@ -247,7 +248,7 @@ def plot_l1_coef_path(
         Cs: Array of C values (inverse regularization strength).
         coef_matrix: Coefficient matrix of shape (len(Cs), n_features).
         feature_names: Feature name strings in dataset column order.
-        save_path: Destination path for the saved figure.
+        figname: Output filename saved under figures/task4/.
         top_k: Number of top features to display.
     """
     max_abs = np.max(np.abs(coef_matrix), axis=0)
@@ -263,20 +264,20 @@ def plot_l1_coef_path(
     ax.legend(fontsize=7, loc="best")
     ax.grid(True, alpha=0.3)
     fig.tight_layout()
-    save_fig(fig, save_path)
+    save_fig(fig, FIG / "task4" / figname)
 
 
 def plot_l1_sparsity(
     Cs: np.ndarray,
     nnz_counts: np.ndarray,
-    save_path: Path = FIG / "task4" / "sparsity.png",
+    figname: str = "sparsity.png",
 ) -> None:
     """Plot number of non-zero coefficients vs C.
 
     Args:
         Cs: Array of C values (inverse regularization strength).
         nnz_counts: Number of non-zero coefficients at each C.
-        save_path: Destination path for the saved figure.
+        figname: Output filename saved under figures/task4/.
     """
     fig, ax = plt.subplots(figsize=(8, 5))
     ax.plot(Cs, nnz_counts, marker="o", markersize=4)
@@ -286,7 +287,7 @@ def plot_l1_sparsity(
     ax.set_title(r"Sparsity: $\|w\|_0$ vs C")
     ax.grid(True, alpha=0.3)
     fig.tight_layout()
-    save_fig(fig, save_path)
+    save_fig(fig, FIG / "task4" / figname)
 
 
 def plot_l1_cv_performance(
@@ -294,7 +295,7 @@ def plot_l1_cv_performance(
     mean_scores: np.ndarray,
     p10_scores: np.ndarray | None = None,
     p90_scores: np.ndarray | None = None,
-    save_path: Path = FIG / "task4" / "cv_performance.png",
+    figname: str = "cv_performance.png",
 ) -> None:
     """Plot mean CV accuracy vs C with optional shaded 80% uncertainty bound.
 
@@ -303,7 +304,7 @@ def plot_l1_cv_performance(
         mean_scores: Mean CV accuracy at each C.
         p10_scores: Optional 10th percentile of CV accuracy for shading.
         p90_scores: Optional 90th percentile of CV accuracy for shading.
-        save_path: Destination path for the saved figure.
+        figname: Output filename saved under figures/task4/.
     """
     fig, ax = plt.subplots(figsize=(8, 5))
     ax.plot(Cs, mean_scores, marker="o", markersize=4, label="Mean CV Accuracy")
@@ -316,4 +317,4 @@ def plot_l1_cv_performance(
     ax.legend()
     ax.grid(True, alpha=0.3)
     fig.tight_layout()
-    save_fig(fig, save_path)
+    save_fig(fig, FIG / "task4" / figname)

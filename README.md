@@ -10,6 +10,7 @@ Logistic regression with mini-batch SGD and Adam on the UCI Spambase dataset. Co
 │   ├── preprocessing.py   # Data loading, train/test split, standardization, K-fold
 │   ├── models.py          # LogisticRegressionSGD with SGD and Adam (from-scratch)
 │   ├── evaluation.py      # Cross-entropy, accuracy, K-fold CV runner
+│   ├── tuner.py           # HP tuning classes (RandomizedGridSearchCV, OptunaTunerCV)
 │   ├── plot.py            # All figure generation functions
 │   └── utils.py           # Config loading and validation (pydantic)
 ├── data/
@@ -71,6 +72,7 @@ Runtime settings are stored in `config.ini` at the project root and validated vi
 random_seed = 2026
 show_inline_plots = true
 verbose = true
+tuning_method = random
 ```
 
 | Setting | Type | Description |
@@ -78,6 +80,7 @@ verbose = true
 | `random_seed` | int | Seed for all random number generators (reproducibility) |
 | `show_inline_plots` | bool | Whether to display plots interactively (set to `false` for headless runs) |
 | `verbose` | bool | Whether to print per-task result DataFrames after each loop (set to `false` for cleaner output) |
+| `tuning_method` | str | Task 2 HP tuning strategy: `"random"` (randomized grid search) or `"optuna"` (TPE) |
 
 ## Running
 
@@ -96,7 +99,7 @@ python src/main.py
 All 4 tasks run sequentially with progress printed to stdout:
 
 1. **Task 1**: Trains 30 model configurations (3 batch sizes x 5 learning rates x 2 regularization settings) for 200 epochs, once with vanilla SGD and once with Adam. Saves 2 training curve plots.
-2. **Task 2**: Runs 5-fold CV over 100 randomly sampled configurations (50 SGD + 50 Adam); tunes lr, batch size, init scale, lambda, and Adam beta parameters. Saves an interactive two-panel parallel coordinates HTML.
+2. **Task 2**: Runs 5-fold CV over 100 configurations (50 SGD + 50 Adam); tunes lr, batch size, init scale, lambda, and Adam beta parameters. Sampling strategy depends on `tuning_method`: randomized grid search or Optuna TPE. Saves an interactive two-panel parallel coordinates HTML.
 3. **Task 3**: Runs K-fold CV over 8 lambda values. Prints best lambda and final test CE/accuracy. Saves 2 plots.
 4. **Task 4**: Fits L1 regularization path over 30 C values using sklearn. Saves 3 plots.
 
@@ -124,7 +127,7 @@ All figures are saved to `figures/` (created automatically):
 - **L2 convention**: `lambda * ||w||_2^2` with gradient term `2*lambda*w` (bias excluded)
 - **Adam optimizer**: `use_adam=True` enables Adam with bias-corrected moment estimates; `beta1`, `beta2` are tunable
 - **K-fold CV**: Standardization is fit per fold on the fold's training portion only (no leakage)
-- **Task 2 randomized search**: 50 SGD + 50 Adam configs sampled independently; lr and lambda log-uniform, beta1/beta2 uniform
+- **Task 2 HP tuning**: 50 SGD + 50 Adam configs; `tuning_method=random` uses numpy randomized sampling, `tuning_method=optuna` uses TPE (Tree-structured Parzen Estimator). Both produce identical output schemas.
 - **Task 4**: Uses sklearn `LogisticRegression` with `penalty="l1"` and `solver="saga"` (pure L1)
 
 ## Troubleshooting
