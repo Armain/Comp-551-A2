@@ -41,7 +41,7 @@ def plot_training_curves(
     batch_sizes = sorted(training_curves["batch_size"].unique())
     lam_vals = sorted(training_curves["lam"].unique())
 
-    fig, axes = plt.subplots(len(lam_vals), len(batch_sizes), figsize=(4 * len(batch_sizes), 8), sharey='row')
+    fig, axes = plt.subplots(len(lam_vals), len(batch_sizes), figsize=(3.5 * len(batch_sizes), 8), sharey='row')
 
     for row, lam in enumerate(lam_vals):
         for col, bs in enumerate(batch_sizes):
@@ -164,14 +164,14 @@ def plot_lambda_sweep(
         label2: Legend suffix for sweep_results2.
         figname: Output filename saved under figures/task3/.
     """
-    suffix1 = f' {label1}' if label1 else ''
-    suffix2 = f' {label2}' if label1 else ''
+    suffix1 = f' ({label1})' if label1 else ''
+    suffix2 = f' ({label2})' if label1 else ''
     
     datasets = [(sweep_results, suffix1, "-")]
     if sweep_results2 is not None:
         datasets.append((sweep_results2, suffix2, "--"))
 
-    fig, ax = plt.subplots(figsize=(10, 6))
+    fig, ax = plt.subplots(figsize=(8, 6))
     for results, suffix, ls in datasets:
         x = results["lam"].values.astype(float)
         for metric, marker, base_label in [("train_ce", "o", "Training Cross-Entropy"), ("val_ce", "s", "Validation Cross-Entropy")]:
@@ -213,8 +213,7 @@ def plot_lambda_sweep_acc(
     if sweep_results2 is not None:
         datasets.append((sweep_results2, suffix2, "--"))
 
-    fig, ax = plt.subplots(figsize=(10, 6))
-    bound_labeled = False
+    fig, ax = plt.subplots(figsize=(8, 6))
     for results, suffix, ls in datasets:
         x = results["lam"].values.astype(float)
         for metric, marker, base_label in [("train_acc", "o", "Training Accuracy"), ("val_acc", "s", "Validation Accuracy")]:
@@ -222,9 +221,7 @@ def plot_lambda_sweep_acc(
             p10  = results[f"p10_{metric}"].values
             p90  = results[f"p90_{metric}"].values
             line, = ax.plot(x, mean, marker=marker, linestyle=ls, label=f"{base_label}{suffix}")
-            shade_label = "_nolegend_" if bound_labeled else "80% Uncertainty Bound"
-            ax.fill_between(x, p10, p90, alpha=0.15, color=line.get_color(), label=shade_label)
-            bound_labeled = True
+            ax.fill_between(x, p10, p90, alpha=0.15, color=line.get_color())
     ax.set_xscale("symlog", linthresh=1e-7)
     ax.set_xlabel(r"$\lambda$")
     ax.set_ylabel("Accuracy")
@@ -254,7 +251,7 @@ def plot_l1_coef_path(
     max_abs = np.max(np.abs(coef_matrix), axis=0)
     top_idx = np.argsort(max_abs)[-top_k:][::-1]
 
-    fig, ax = plt.subplots(figsize=(10, 6))
+    fig, ax = plt.subplots(figsize=(8, 6))
     for i in top_idx:
         ax.plot(Cs, coef_matrix[:, i], label=feature_names[i])
     ax.set_xscale("log")
@@ -279,7 +276,7 @@ def plot_l1_sparsity(
         nnz_counts: Number of non-zero coefficients at each C.
         figname: Output filename saved under figures/task4/.
     """
-    fig, ax = plt.subplots(figsize=(8, 5))
+    fig, ax = plt.subplots(figsize=(8, 6))
     ax.plot(Cs, nnz_counts, marker="o", markersize=4)
     ax.set_xscale("log")
     ax.set_xlabel(r"C ($\frac{1}{\lambda}$)")
@@ -306,7 +303,7 @@ def plot_l1_cv_performance(
         p90_scores: Optional 90th percentile of CV accuracy for shading.
         figname: Output filename saved under figures/task4/.
     """
-    fig, ax = plt.subplots(figsize=(8, 5))
+    fig, ax = plt.subplots(figsize=(8, 6))
     ax.plot(Cs, mean_scores, marker="o", markersize=4, label="Mean CV Accuracy")
     if p10_scores is not None and p90_scores is not None:
         ax.fill_between(Cs, p10_scores, p90_scores, alpha=0.2, label="80% Uncertainty Bound")
