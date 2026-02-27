@@ -118,7 +118,7 @@ def tune_hyperparameters(X_train: pd.DataFrame, y_train: pd.Series) -> tuple[pd.
     hp_results = pd.concat([sgd_results, adam_results], ignore_index=True)
 
     if config.verbose:
-        print(hp_results[["lr", "batch_size", "init_scale", "lam", "use_adam", "mean_val_ce", "mean_val_acc"]].to_string(index=False))
+        print(hp_results[["lr", "batch_size", "init_scale", "lam", "use_adam", "mean_val_ce", "std_val_ce", "mean_val_acc", "std_val_acc"]].to_string(index=False))
 
     best = hp_results.loc[hp_results["mean_val_ce"].idxmin()]
     print(f"\nBest config: lr={best['lr']:.4e}, B={int(best['batch_size'])}, "
@@ -245,8 +245,9 @@ def fit_and_plot_l1_regularization_path(
             cv_scores[fold_i, j] = fold_model.score(X_fold_va_std, y_fold_va)
 
     mean_scores = cv_scores.mean(axis=0)
-    std_scores = cv_scores.std(axis=0)
-    plot_l1_cv_performance(Cs, mean_scores, std_scores)
+    p10_scores = np.percentile(cv_scores, 10, axis=0)
+    p90_scores = np.percentile(cv_scores, 90, axis=0)
+    plot_l1_cv_performance(Cs, mean_scores, p10_scores, p90_scores)
 
     best_C = float(Cs[np.argmax(mean_scores)])
     print(f"Best C (CV): {best_C:.4e} (lambda={1/best_C:.4e})")

@@ -66,7 +66,7 @@ def kfold_cv(
         beta2: Adam exponential decay rate for the second moment.
 
     Returns:
-        pd.Series with mean_ and std_ prefixed metrics across folds.
+        pd.Series with mean_, std_, p10_, p90_ prefixed metrics across folds.
     """
     folds = get_kfold_indices(len(y_train), k=k, seed=seed)
     X_arr = X_train.values
@@ -99,5 +99,9 @@ def kfold_cv(
             accuracy(y_va, model.predict(X_va_std)),
         ]
 
-    return pd.concat([fold_metrics.mean().add_prefix("mean_"),
-                      fold_metrics.std().add_prefix("std_")])
+    return pd.concat([
+        fold_metrics.mean().add_prefix("mean_"),
+        fold_metrics.std().add_prefix("std_"),
+        fold_metrics.quantile(0.1).add_prefix("p10_"),
+        fold_metrics.quantile(0.9).add_prefix("p90_"),
+    ])

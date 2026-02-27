@@ -160,16 +160,16 @@ def plot_lambda_sweep(
     """
     fig, ax = plt.subplots(figsize=(8, 5))
     x = sweep_results["lam"].values.astype(float)
-    for metric, marker, label in [("train_ce", "o", "Train CE"), ("val_ce", "s", "Val CE")]:
+    for metric, marker, label in [("train_ce", "o", "Training Cross-Entropy"), ("val_ce", "s", "Validation Cross-Entropy")]:
         mean = sweep_results[f"mean_{metric}"].values
-        std = sweep_results[f"std_{metric}"].values
-        ax.plot(x, mean, marker=marker, label=label)
-        ax.fill_between(x, mean - std, mean + std, alpha=0.2)
+        p10  = sweep_results[f"p10_{metric}"].values
+        p90  = sweep_results[f"p90_{metric}"].values
+        line, = ax.plot(x, mean, marker=marker, label=label)
+        ax.fill_between(x, p10, p90, alpha=0.2, color=line.get_color(), label="80% Uncertainty Bound")
     ax.set_xscale("symlog", linthresh=1e-7)
     ax.set_xlabel(r"$\lambda$")
     ax.set_ylabel("Cross-Entropy")
-    ax.set_ylim(bottom=0)
-    ax.set_title(r"Bias-Variance Trade-off: Cross Entropy vs $\lambda$")
+    ax.set_title(r"Bias-Variance Trade-off: Cross-Entropy vs $\lambda$")
     ax.legend()
     ax.grid(True, alpha=0.3)
     fig.tight_layout()
@@ -189,15 +189,15 @@ def plot_lambda_sweep_acc(
     """
     fig, ax = plt.subplots(figsize=(8, 5))
     x = sweep_results["lam"].values.astype(float)
-    for metric, marker, label in [("train_acc", "o", "Train Acc"), ("val_acc", "s", "Val Acc")]:
+    for metric, marker, label in [("train_acc", "o", "Training Accuracy"), ("val_acc", "s", "Validation Accuracy")]:
         mean = sweep_results[f"mean_{metric}"].values
-        std = sweep_results[f"std_{metric}"].values
-        ax.plot(x, mean, marker=marker, label=label)
-        ax.fill_between(x, mean - std, mean + std, alpha=0.2)
+        p10  = sweep_results[f"p10_{metric}"].values
+        p90  = sweep_results[f"p90_{metric}"].values
+        line, = ax.plot(x, mean, marker=marker, label=label)
+        ax.fill_between(x, p10, p90, alpha=0.2, color=line.get_color(), label="80% Uncertainty Bound")
     ax.set_xscale("symlog", linthresh=1e-7)
     ax.set_xlabel(r"$\lambda$")
     ax.set_ylabel("Accuracy")
-    ax.set_ylim(top=1)
     ax.set_title(r"Bias-Variance Trade-off: Accuracy vs $\lambda$")
     ax.legend()
     ax.grid(True, alpha=0.3)
@@ -263,25 +263,28 @@ def plot_l1_sparsity(
 def plot_l1_cv_performance(
     Cs: np.ndarray,
     mean_scores: np.ndarray,
-    std_scores: np.ndarray | None = None,
+    p10_scores: np.ndarray | None = None,
+    p90_scores: np.ndarray | None = None,
     save_path: Path = FIG / "task4" / "cv_performance.png",
 ) -> None:
-    """Plot mean CV accuracy vs C with optional shaded std region.
+    """Plot mean CV accuracy vs C with optional shaded 80% uncertainty bound.
 
     Args:
         Cs: Array of C values (inverse regularization strength).
         mean_scores: Mean CV accuracy at each C.
-        std_scores: Optional std of CV accuracy for shading.
+        p10_scores: Optional 10th percentile of CV accuracy for shading.
+        p90_scores: Optional 90th percentile of CV accuracy for shading.
         save_path: Destination path for the saved figure.
     """
     fig, ax = plt.subplots(figsize=(8, 5))
-    ax.plot(Cs, mean_scores, marker="o", markersize=4, label="Mean CV Acc")
-    if std_scores is not None:
-        ax.fill_between(Cs, mean_scores - std_scores, mean_scores + std_scores, alpha=0.2)
+    ax.plot(Cs, mean_scores, marker="o", markersize=4, label="Mean CV Accuracy")
+    if p10_scores is not None and p90_scores is not None:
+        ax.fill_between(Cs, p10_scores, p90_scores, alpha=0.2, label="80% Uncertainty Bound")
     ax.set_xscale("log")
     ax.set_xlabel(r"C ($\frac{1}{\lambda}$)")
     ax.set_ylabel("CV Accuracy")
     ax.set_title("L1 Logistic Regression: CV Performance vs C")
+    ax.legend()
     ax.grid(True, alpha=0.3)
     fig.tight_layout()
     save_fig(fig, save_path)
