@@ -165,8 +165,8 @@ def plot_lambda_sweep(
         figname: Output filename saved under figures/task3/.
     """
     suffix1 = f' ({label1})' if label1 else ''
-    suffix2 = f' ({label2})' if label1 else ''
-    
+    suffix2 = f' ({label2})' if label2 else ''
+
     datasets = [(sweep_results, suffix1, "-")]
     if sweep_results2 is not None:
         datasets.append((sweep_results2, suffix2, "--"))
@@ -207,8 +207,8 @@ def plot_lambda_sweep_acc(
         figname: Output filename saved under figures/task3/.
     """
     suffix1 = f' ({label1})' if label1 else ''
-    suffix2 = f' ({label2})' if label1 else ''
-    
+    suffix2 = f' ({label2})' if label2 else ''
+
     datasets = [(sweep_results, suffix1, "-")]
     if sweep_results2 is not None:
         datasets.append((sweep_results2, suffix2, "--"))
@@ -251,14 +251,14 @@ def plot_l1_coef_path(
     max_abs = np.max(np.abs(coef_matrix), axis=0)
     top_idx = np.argsort(max_abs)[-top_k:][::-1]
 
-    fig, ax = plt.subplots(figsize=(8, 6))
+    fig, ax = plt.subplots(figsize=(6, 6))
     for i in top_idx:
         ax.plot(Cs, coef_matrix[:, i], label=feature_names[i])
     ax.set_xscale("log")
     ax.set_xlabel(r"C ($\frac{1}{\lambda}$)")
     ax.set_ylabel("Coefficient value")
     ax.set_title(f"L1 Regularization Path (top {top_k} features)")
-    ax.legend(fontsize=7, loc="best")
+    ax.legend(fontsize=10, loc="lower left")
     ax.grid(True, alpha=0.3)
     fig.tight_layout()
     save_fig(fig, FIG / "task4" / figname)
@@ -276,7 +276,7 @@ def plot_l1_sparsity(
         nnz_counts: Number of non-zero coefficients at each C.
         figname: Output filename saved under figures/task4/.
     """
-    fig, ax = plt.subplots(figsize=(8, 6))
+    fig, ax = plt.subplots(figsize=(6, 6))
     ax.plot(Cs, nnz_counts, marker="o", markersize=4)
     ax.set_xscale("log")
     ax.set_xlabel(r"C ($\frac{1}{\lambda}$)")
@@ -303,7 +303,7 @@ def plot_l1_cv_performance(
         p90_scores: Optional 90th percentile of CV accuracy for shading.
         figname: Output filename saved under figures/task4/.
     """
-    fig, ax = plt.subplots(figsize=(8, 6))
+    fig, ax = plt.subplots(figsize=(6, 6))
     ax.plot(Cs, mean_scores, marker="o", markersize=4, label="Mean CV Accuracy")
     if p10_scores is not None and p90_scores is not None:
         ax.fill_between(Cs, p10_scores, p90_scores, alpha=0.2, label="80% Uncertainty Bound")

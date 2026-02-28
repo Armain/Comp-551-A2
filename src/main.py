@@ -32,10 +32,8 @@ def training_curves(X_train: pd.DataFrame, y_train: pd.Series, use_adam: bool = 
     Returns:
         training_curves DataFrame with per-config train loss history and final metrics.
     """
-    if use_adam:
-        print("\nTask 1: Training Curves for Logistic Regression SGD")
-    else:
-        print("\nTask 1: Training Curves for Logistic Regression SGD")
+    suffix = 'Adam' if use_adam else 'Vanilla SGD'
+    print(f"\nTask 1: Training Curves for Logistic Regression ({suffix})")
     X_tr_std, _, _, _ = standardize(X_train)
 
     batch_sizes = [1, 16, 64]

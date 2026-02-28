@@ -10,6 +10,7 @@ CONFIG_PATH = Path(__file__).parent.parent / "config.ini"
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
 
+
 class Settings(BaseModel):
     random_seed: int
     show_inline_plots: bool

@@ -15,9 +15,6 @@ assignment_description.md
 *.png
 *.html
 
-# AI
-CLAUDE.md
-.claude/
 # macOS metadata
 .DS_Store
 **/.DS_Store
